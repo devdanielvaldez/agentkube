@@ -102,6 +102,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentkube-providers-http"
+version = "0.2.0"
+dependencies = [
+ "agentkube-agents",
+ "agentkube-core",
+ "agentkube-providers",
+ "axum",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "agentkube-queue"
 version = "0.2.0"
 dependencies = [
