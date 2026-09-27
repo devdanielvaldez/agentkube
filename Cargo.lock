@@ -73,6 +73,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentkube-scheduler"
+version = "0.1.0"
+dependencies = [
+ "agentkube-agents",
+ "agentkube-core",
+ "agentkube-tasks",
+]
+
+[[package]]
 name = "agentkube-storage"
 version = "0.1.0"
 dependencies = [
