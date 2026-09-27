@@ -1,0 +1,16 @@
+[package]
+name = "agentkube-router"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Health, capability, privacy, and cost-aware model routing for AgentKube"
+
+[dependencies]
+agentkube-agents = { path = "../agents" }
+agentkube-core = { path = "../core" }
+agentkube-providers = { path = "../providers" }
+agentkube-tasks = { path = "../tasks" }
+
+[dev-dependencies]
+serde_json.workspace = true

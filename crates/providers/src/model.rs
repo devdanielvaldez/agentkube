@@ -71,6 +71,14 @@ impl GenerationRequest {
         self
     }
 
+    /// Clones the request for a model selected by automatic routing.
+    #[must_use]
+    pub fn for_model(&self, model: ModelName) -> Self {
+        let mut request = self.clone();
+        request.model = model;
+        request
+    }
+
     /// Returns the requested provider-specific model name.
     #[must_use]
     pub const fn model(&self) -> &ModelName {

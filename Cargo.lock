@@ -62,6 +62,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentkube-router"
+version = "0.1.0"
+dependencies = [
+ "agentkube-agents",
+ "agentkube-core",
+ "agentkube-providers",
+ "agentkube-tasks",
+ "serde_json",
+]
+
+[[package]]
 name = "agentkube-storage"
 version = "0.1.0"
 dependencies = [
