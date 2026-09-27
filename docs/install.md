@@ -10,13 +10,21 @@ source with Cargo.
 ## Homebrew (macOS and Linux)
 
 ```bash
-brew install https://raw.githubusercontent.com/devdanielvaldez/agentkube/main/Formula/agentkube.rb
+brew tap devdanielvaldez/agentkube https://github.com/devdanielvaldez/agentkube
+brew install agentkube
 ```
+
+(Homebrew 7 no longer installs formulae from raw URLs, so the explicit tap
+step is required. The two-argument form works with any repository name.)
 
 This installs both `akctl` and `agentkube-api` from the prebuilt bottles for
 your platform (macOS arm64/x86_64, Linux x86_64/arm64). The formula is bumped
-automatically on every release, so upgrading is the same command again (or
-`brew reinstall <url>`).
+automatically on every release, so upgrading is:
+
+```bash
+brew update
+brew upgrade agentkube
+```
 
 ## Update notifications
 
@@ -153,7 +161,8 @@ cargo install --path crates/api --bin agentkube-api
 curl -fsSL .../install.sh | bash -s -- vX.Y.Z
 
 # Upgrade (Homebrew):
-brew reinstall https://raw.githubusercontent.com/devdanielvaldez/agentkube/main/Formula/agentkube.rb
+brew update
+brew upgrade agentkube
 
 # Uninstall (Unix script installs):
 rm -f /usr/local/bin/akctl /usr/local/bin/agentkube-api ~/.local/bin/akctl ~/.local/bin/agentkube-api

@@ -62,7 +62,7 @@ pub fn format_notice(current: &str, latest: &str) -> String {
     };
     format!(
         "akctl: a new version {latest} is available (you have {have}).\n\
-         Update with: brew reinstall https://raw.githubusercontent.com/devdanielvaldez/agentkube/main/Formula/agentkube.rb\n\
+         Update with: brew upgrade agentkube\n\
          or: curl -fsSL https://raw.githubusercontent.com/devdanielvaldez/agentkube/main/install.sh | bash -s -- {latest}"
     )
 }

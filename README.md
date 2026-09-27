@@ -123,7 +123,8 @@ Prebuilt `akctl` + `agentkube-api` installers for macOS, Linux, and Windows:
 
 ```bash
 # Homebrew (macOS/Linux)
-brew install https://raw.githubusercontent.com/devdanielvaldez/agentkube/main/Formula/agentkube.rb
+brew tap devdanielvaldez/agentkube https://github.com/devdanielvaldez/agentkube
+brew install agentkube
 ```
 
 ```bash
