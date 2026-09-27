@@ -26,6 +26,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentkube-controllers"
+version = "0.1.0"
+dependencies = [
+ "agentkube-agents",
+ "agentkube-core",
+ "agentkube-storage",
+]
+
+[[package]]
 name = "agentkube-core"
 version = "0.1.0"
 dependencies = [

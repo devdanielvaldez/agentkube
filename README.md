@@ -81,8 +81,9 @@ The repository currently contains the foundational Rust workspace:
 | `agentkube-router` | Health, privacy, capability, cost-aware routing, and failover | Implemented |
 | `agentkube-workers` | Atomic execution, runtime integration, heartbeats, and settlement | Implemented |
 | `agentkube-scheduler` | Constraint filtering, explainable scoring, and deterministic placement | Implemented |
+| `agentkube-controllers` | Idempotent deployment and agent-status reconciliation | Implemented |
 
-The next milestone is reconciliation, followed by API and CLI.
+The next milestone is the API, followed by the CLI.
 
 The complete technical vision is documented in
 [docs/architecture.md](docs/architecture.md).

@@ -1,0 +1,14 @@
+[package]
+name = "agentkube-controllers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Idempotent desired-state reconciliation controllers for AgentKube"
+
+[dependencies]
+agentkube-agents = { path = "../agents" }
+agentkube-core = { path = "../core" }
+
+[dev-dependencies]
+agentkube-storage = { path = "../storage" }
