@@ -1,4 +1,6 @@
-use crate::{ApiState, HttpApiError, pagination::paginate};
+use crate::{
+    ApiState, HttpApiError, metrics::MetricsResponse, nodes::NodeInfo, pagination::paginate,
+};
 use agentkube_agents::{
     AgentDefinition, AgentDeployment, AgentDeploymentDocument, AgentDocument, AgentPhase,
 };
@@ -38,6 +40,14 @@ pub(crate) async fn health() -> Json<HealthResponse> {
 pub(crate) async fn ready(State(state): State<ApiState>) -> ApiResult<Json<HealthResponse>> {
     state.queue().stats().await?;
     Ok(health().await)
+}
+
+pub(crate) async fn metrics(State(state): State<ApiState>) -> ApiResult<MetricsResponse> {
+    Ok(crate::metrics::render(&state).await?)
+}
+
+pub(crate) async fn list_nodes(State(state): State<ApiState>) -> Json<Vec<NodeInfo>> {
+    Json(state.node_registry().list().await)
 }
 
 pub(crate) async fn not_found(OriginalUri(uri): OriginalUri) -> HttpApiError {

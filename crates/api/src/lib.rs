@@ -8,10 +8,13 @@
 
 mod error;
 mod handlers;
+mod metrics;
+mod nodes;
 mod pagination;
 mod server;
 mod state;
 
 pub use error::HttpApiError;
+pub use nodes::{NodeInfo, NodeRegistry};
 pub use server::{router, serve};
 pub use state::ApiState;

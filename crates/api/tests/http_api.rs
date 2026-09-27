@@ -142,7 +142,20 @@ fn task_document(name: &str) -> Value {
 }
 
 async fn request(app: &Router, method: &str, uri: &str, body: Option<&Value>) -> Response<Body> {
+    authed_request(app, method, uri, body, None).await
+}
+
+async fn authed_request(
+    app: &Router,
+    method: &str,
+    uri: &str,
+    body: Option<&Value>,
+    token: Option<&str>,
+) -> Response<Body> {
     let mut builder = Request::builder().method(method).uri(uri);
+    if let Some(token) = token {
+        builder = builder.header("authorization", format!("Bearer {token}"));
+    }
     let request_body = match body {
         Some(value) => {
             builder = builder.header("content-type", "application/json");
@@ -414,4 +427,109 @@ async fn malformed_json_and_oversized_payloads_do_not_escape_error_handling() {
     .await;
     assert_eq!(oversized.status(), StatusCode::BAD_REQUEST);
     assert_eq!(response_json(oversized).await["reason"], "BAD_REQUEST");
+}
+
+fn authed_fixture(token: &str) -> Fixture {
+    let agents = Arc::new(InMemoryResourceRepository::new());
+    let deployments = Arc::new(InMemoryResourceRepository::new());
+    let tasks = Arc::new(InMemoryResourceRepository::new());
+    let queue = Arc::new(InMemoryTaskQueue::new());
+    let state = ApiState::new(
+        agents.clone(),
+        deployments.clone(),
+        tasks.clone(),
+        queue.clone(),
+    )
+    .with_auth_token(token);
+    Fixture {
+        app: router(state, 1024 * 1024),
+        agents,
+        deployments,
+        tasks,
+        queue,
+    }
+}
+
+async fn response_text(response: Response<Body>) -> String {
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    String::from_utf8(bytes.to_vec()).unwrap()
+}
+
+#[tokio::test]
+async fn bearer_auth_guards_versioned_routes_but_not_probes() {
+    let fixture = authed_fixture("s3cret");
+
+    let denied = authed_request(&fixture.app, "GET", "/v1/agents", None, None).await;
+    assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
+    let error = response_json(denied).await;
+    assert_eq!(error["reason"], "UNAUTHORIZED");
+    assert!(!error.to_string().contains("s3cret"));
+
+    let wrong = authed_request(&fixture.app, "GET", "/v1/agents", None, Some("nope")).await;
+    assert_eq!(wrong.status(), StatusCode::UNAUTHORIZED);
+
+    let allowed = authed_request(&fixture.app, "GET", "/v1/agents", None, Some("s3cret")).await;
+    assert_eq!(allowed.status(), StatusCode::OK);
+
+    // Probes and metrics stay open for load balancers and scrapers.
+    for uri in ["/healthz", "/readyz", "/metrics"] {
+        let response = request(&fixture.app, "GET", uri, None).await;
+        assert_eq!(response.status(), StatusCode::OK, "{uri} must stay open");
+    }
+}
+
+#[tokio::test]
+async fn metrics_expose_counts_and_queue_depth() {
+    let fixture = fixture(1024 * 1024);
+    let created = request(
+        &fixture.app,
+        "POST",
+        "/v1/tasks",
+        Some(&task_document("metered")),
+    )
+    .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+
+    let metrics = request(&fixture.app, "GET", "/metrics", None).await;
+    assert_eq!(metrics.status(), StatusCode::OK);
+    let body = response_text(metrics).await;
+    for needle in [
+        "agentkube_tasks_total 1",
+        "agentkube_tasks_queued 1",
+        "agentkube_queue_ready 1",
+        "agentkube_build_info{",
+        "agentkube_uptime_seconds",
+    ] {
+        assert!(body.contains(needle), "missing {needle} in:\n{body}");
+    }
+}
+
+#[tokio::test]
+async fn nodes_endpoint_reflects_recorded_heartbeats() {
+    use agentkube_api::{NodeInfo, NodeRegistry};
+    use agentkube_core::NodeId;
+
+    let state = ApiState::new(
+        Arc::new(InMemoryResourceRepository::new()),
+        Arc::new(InMemoryResourceRepository::new()),
+        Arc::new(InMemoryResourceRepository::new()),
+        Arc::new(InMemoryTaskQueue::new()),
+    );
+    let registry: Arc<NodeRegistry> = state.node_registry();
+    assert!(registry.list().await.is_empty());
+
+    let node_id = NodeId::new();
+    registry
+        .record_heartbeat(NodeInfo::new(node_id, 2, 4.try_into().unwrap()))
+        .await;
+    let app = router(state, 1024 * 1024);
+
+    let listed = request(&app, "GET", "/v1/nodes", None).await;
+    assert_eq!(listed.status(), StatusCode::OK);
+    let nodes = response_json(listed).await;
+    let nodes = nodes.as_array().unwrap();
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0]["nodeId"].as_str().unwrap(), node_id.to_string());
+    assert_eq!(nodes[0]["activeExecutions"], 2);
+    assert_eq!(nodes[0]["capacity"], 4);
 }

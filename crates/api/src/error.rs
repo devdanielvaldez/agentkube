@@ -21,6 +21,10 @@ impl HttpApiError {
         Self::new(404, ApiErrorReason::NotFound, message)
     }
 
+    pub(crate) fn unauthorized(message: impl Into<String>) -> Self {
+        Self::new(401, ApiErrorReason::Unauthorized, message)
+    }
+
     pub(crate) fn conflict(message: impl Into<String>) -> Self {
         Self::new(409, ApiErrorReason::Conflict, message)
     }
