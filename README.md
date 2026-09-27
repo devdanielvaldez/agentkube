@@ -122,7 +122,12 @@ types, documented public APIs, and tests at module and public-contract levels.
 Prebuilt `akctl` + `agentkube-api` installers for macOS, Linux, and Windows:
 
 ```bash
-# macOS / Linux
+# Homebrew (macOS/Linux)
+brew install https://raw.githubusercontent.com/devdanielvaldez/agentkube/main/Formula/agentkube.rb
+```
+
+```bash
+# macOS / Linux (script)
 curl -fsSL https://raw.githubusercontent.com/devdanielvaldez/agentkube/main/install.sh | bash
 ```
 

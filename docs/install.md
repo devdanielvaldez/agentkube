@@ -7,7 +7,18 @@ source with Cargo.
 > Latest releases: `https://github.com/devdanielvaldez/agentkube/releases`
 > Requires nothing else at runtime (TLS uses bundled Rustls, no OpenSSL).
 
-## Quick install
+## Homebrew (macOS and Linux)
+
+```bash
+brew install https://raw.githubusercontent.com/devdanielvaldez/agentkube/main/Formula/agentkube.rb
+```
+
+This installs both `akctl` and `agentkube-api` from the prebuilt bottles for
+your platform (macOS arm64/x86_64, Linux x86_64/arm64). The formula is bumped
+automatically on every release, so upgrading is the same command again (or
+`brew reinstall <url>`).
+
+## Quick install (script)
 
 ### macOS (Apple Silicon and Intel)
 
@@ -127,8 +138,16 @@ cargo install --path crates/api --bin agentkube-api
 # Upgrade (same installer, optional version):
 curl -fsSL .../install.sh | bash -s -- vX.Y.Z
 
-# Uninstall (Unix):
+# Upgrade (Homebrew):
+brew reinstall https://raw.githubusercontent.com/devdanielvaldez/agentkube/main/Formula/agentkube.rb
+
+# Uninstall (Unix script installs):
 rm -f /usr/local/bin/akctl /usr/local/bin/agentkube-api ~/.local/bin/akctl ~/.local/bin/agentkube-api
+```
+
+```powershell
+# Uninstall (Homebrew):
+brew uninstall agentkube
 ```
 
 ```powershell

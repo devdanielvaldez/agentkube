@@ -167,7 +167,12 @@ jobs:
             ## Install
 
             ```bash
-            # macOS / Linux
+            # Homebrew (macOS/Linux)
+            brew install https://raw.githubusercontent.com/devdanielvaldez/agentkube/main/Formula/agentkube.rb
+            ```
+
+            ```bash
+            # macOS / Linux (script)
             curl -fsSL https://raw.githubusercontent.com/devdanielvaldez/agentkube/main/install.sh | bash -s -- ${{ github.ref_name }}
             ```
 
@@ -180,3 +185,31 @@ jobs:
             Full guide: [docs/install.md](https://github.com/devdanielvaldez/agentkube/blob/${{ github.ref_name }}/docs/install.md)
 
             Verify checksums with `CHECKSUMS.txt` or the per-asset `.sha256` files.
+
+  homebrew:
+    name: update homebrew formula
+    needs: publish
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Bump formula from release checksums
+        shell: bash
+        run: ./scripts/bump-formula.sh "${{ github.ref_name }}"
+
+      - name: Commit and push formula
+        shell: bash
+        run: |
+          if git diff --quiet -- Formula/agentkube.rb; then
+            echo "Formula already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/agentkube.rb
+          git commit -m "chore(homebrew): update formula to ${{ github.ref_name }}"
+          git push origin main
