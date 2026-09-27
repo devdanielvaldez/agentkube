@@ -16,8 +16,10 @@ pub use agentkube_core::{DurationError, DurationErrorKind, HumanDuration};
 pub use error::{ConfigError, ConfigValidationError};
 pub use loader::ConfigLoader;
 pub use model::{
-    AgentKubeConfig, ConfigPatch, ControlPlaneConfig, ControlPlaneConfigPatch, LogLevel,
-    RuntimeEnvironment, SamplingRatio, SamplingRatioError, TelemetryConfig, TelemetryConfigPatch,
-    WorkerConfig, WorkerConfigPatch,
+    AgentKubeConfig, AuthConfig, AuthConfigPatch, ConfigPatch, ControlPlaneConfig,
+    ControlPlaneConfigPatch, LogLevel, OperatorConfig, OperatorConfigPatch, ProvidersConfig,
+    ProvidersConfigPatch, RuntimeEnvironment, SamplingRatio, SamplingRatioError, SecretString,
+    StorageConfig, StorageConfigPatch, TelemetryConfig, TelemetryConfigPatch, WorkerConfig,
+    WorkerConfigPatch,
 };
 pub use source::{ConfigSource, EnvironmentSource, JsonFileSource, JsonSource};

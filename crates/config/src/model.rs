@@ -1,6 +1,6 @@
 use crate::{ConfigValidationError, HumanDuration};
 use serde::{Deserialize, Deserializer, Serialize, de};
-use std::{error::Error, fmt, net::SocketAddr, num::NonZeroU16};
+use std::{error::Error, fmt, net::SocketAddr, num::NonZeroU16, path::PathBuf, str::FromStr};
 
 const DEFAULT_MAX_REQUEST_BODY_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_WORKER_CONCURRENCY: u16 = 4096;
@@ -12,6 +12,10 @@ pub struct AgentKubeConfig {
     environment: RuntimeEnvironment,
     control_plane: ControlPlaneConfig,
     worker: WorkerConfig,
+    storage: StorageConfig,
+    operator: OperatorConfig,
+    providers: ProvidersConfig,
+    auth: AuthConfig,
     telemetry: TelemetryConfig,
     shutdown_grace_period: HumanDuration,
 }
@@ -33,6 +37,30 @@ impl AgentKubeConfig {
     #[must_use]
     pub const fn worker(&self) -> &WorkerConfig {
         &self.worker
+    }
+
+    /// Returns durable storage settings.
+    #[must_use]
+    pub const fn storage(&self) -> &StorageConfig {
+        &self.storage
+    }
+
+    /// Returns operator loop settings.
+    #[must_use]
+    pub const fn operator(&self) -> &OperatorConfig {
+        &self.operator
+    }
+
+    /// Returns model provider connectivity settings.
+    #[must_use]
+    pub const fn providers(&self) -> &ProvidersConfig {
+        &self.providers
+    }
+
+    /// Returns API authentication settings.
+    #[must_use]
+    pub const fn auth(&self) -> &AuthConfig {
+        &self.auth
     }
 
     /// Returns telemetry settings.
@@ -79,6 +107,30 @@ impl AgentKubeConfig {
                 "must not exceed 63 bytes",
             ));
         }
+        if self.operator.reconcile_interval.get().is_zero() {
+            return Err(ConfigValidationError::new(
+                "operator.reconcileInterval",
+                "must be positive",
+            ));
+        }
+        if self.operator.dispatch_interval.get().is_zero() {
+            return Err(ConfigValidationError::new(
+                "operator.dispatchInterval",
+                "must be positive",
+            ));
+        }
+        if !is_http_url(&self.providers.ollama_base_url) {
+            return Err(ConfigValidationError::new(
+                "providers.ollamaBaseUrl",
+                "must use http or https",
+            ));
+        }
+        if !is_http_url(&self.providers.openai_base_url) {
+            return Err(ConfigValidationError::new(
+                "providers.openaiBaseUrl",
+                "must use http or https",
+            ));
+        }
         Ok(())
     }
 
@@ -91,6 +143,18 @@ impl AgentKubeConfig {
         }
         if let Some(worker) = patch.worker {
             self.worker.apply(worker);
+        }
+        if let Some(storage) = patch.storage {
+            self.storage.apply(storage);
+        }
+        if let Some(operator) = patch.operator {
+            self.operator.apply(operator);
+        }
+        if let Some(providers) = patch.providers {
+            self.providers.apply(providers);
+        }
+        if let Some(auth) = patch.auth {
+            self.auth.apply(auth);
         }
         if let Some(telemetry) = patch.telemetry {
             self.telemetry.apply(telemetry);
@@ -107,6 +171,10 @@ impl Default for AgentKubeConfig {
             environment: RuntimeEnvironment::Development,
             control_plane: ControlPlaneConfig::default(),
             worker: WorkerConfig::default(),
+            storage: StorageConfig::default(),
+            operator: OperatorConfig::default(),
+            providers: ProvidersConfig::default(),
+            auth: AuthConfig::default(),
             telemetry: TelemetryConfig::default(),
             shutdown_grace_period: "30s".parse().expect("default duration is valid"),
         }
@@ -225,6 +293,242 @@ impl Default for WorkerConfig {
             lease_timeout: "30s".parse().expect("default duration is valid"),
         }
     }
+}
+
+/// Filesystem location for durable operator state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StorageConfig {
+    data_dir: PathBuf,
+}
+
+impl StorageConfig {
+    /// Returns the directory holding the SQLite database file.
+    #[must_use]
+    pub fn data_dir(&self) -> &PathBuf {
+        &self.data_dir
+    }
+
+    fn apply(&mut self, patch: StorageConfigPatch) {
+        if let Some(value) = patch.data_dir {
+            self.data_dir = value;
+        }
+    }
+}
+
+impl Default for StorageConfig {
+    fn default() -> Self {
+        Self {
+            data_dir: PathBuf::from("agentkube-data"),
+        }
+    }
+}
+
+/// Reconcile and dispatch cadence for the operator loops.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OperatorConfig {
+    reconcile_interval: HumanDuration,
+    dispatch_interval: HumanDuration,
+}
+
+impl OperatorConfig {
+    /// Returns how often desired state is reconciled.
+    #[must_use]
+    pub const fn reconcile_interval(&self) -> HumanDuration {
+        self.reconcile_interval
+    }
+
+    /// Returns how often queued tasks are dispatched to workers.
+    #[must_use]
+    pub const fn dispatch_interval(&self) -> HumanDuration {
+        self.dispatch_interval
+    }
+
+    fn apply(&mut self, patch: OperatorConfigPatch) {
+        if let Some(value) = patch.reconcile_interval {
+            self.reconcile_interval = value;
+        }
+        if let Some(value) = patch.dispatch_interval {
+            self.dispatch_interval = value;
+        }
+    }
+}
+
+impl Default for OperatorConfig {
+    fn default() -> Self {
+        Self {
+            reconcile_interval: "15s".parse().expect("default duration is valid"),
+            dispatch_interval: "1s".parse().expect("default duration is valid"),
+        }
+    }
+}
+
+/// A secret value that never appears in logs or diagnostics.
+///
+/// Serialization preserves the real value (configuration round-trips must
+/// stay intact); `Debug` and `Display` always render `***`.
+#[derive(Clone, PartialEq, Eq)]
+pub struct SecretString(String);
+
+impl SecretString {
+    /// Creates a secret, rejecting empty values.
+    pub fn new(value: impl Into<String>) -> Result<Self, SecretStringError> {
+        let value = value.into();
+        if value.is_empty() {
+            return Err(SecretStringError);
+        }
+        Ok(Self(value))
+    }
+
+    /// Returns the secret for intentional use (authentication, API keys).
+    #[must_use]
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Debug for SecretString {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("SecretString(***)")
+    }
+}
+
+impl fmt::Display for SecretString {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("***")
+    }
+}
+
+impl FromStr for SecretString {
+    type Err = SecretStringError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::new(value)
+    }
+}
+
+impl Serialize for SecretString {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.expose())
+    }
+}
+
+impl<'de> Deserialize<'de> for SecretString {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Self::new(value).map_err(de::Error::custom)
+    }
+}
+
+/// Empty secrets are rejected at the boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SecretStringError;
+
+impl fmt::Display for SecretStringError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("secret must not be empty")
+    }
+}
+
+impl Error for SecretStringError {}
+
+/// Model provider connectivity for inference.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProvidersConfig {
+    ollama_enabled: bool,
+    ollama_base_url: String,
+    openai_base_url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    openai_api_key: Option<SecretString>,
+}
+
+impl ProvidersConfig {
+    /// Returns whether the local Ollama provider is registered.
+    #[must_use]
+    pub const fn ollama_enabled(&self) -> bool {
+        self.ollama_enabled
+    }
+
+    /// Returns the Ollama base URL (for example `http://127.0.0.1:11434`).
+    #[must_use]
+    pub fn ollama_base_url(&self) -> &str {
+        &self.ollama_base_url
+    }
+
+    /// Returns the OpenAI-compatible base URL.
+    #[must_use]
+    pub fn openai_base_url(&self) -> &str {
+        &self.openai_base_url
+    }
+
+    /// Returns the OpenAI API key when configured (never logged).
+    #[must_use]
+    pub fn openai_api_key(&self) -> Option<&SecretString> {
+        self.openai_api_key.as_ref()
+    }
+
+    fn apply(&mut self, patch: ProvidersConfigPatch) {
+        if let Some(value) = patch.ollama_enabled {
+            self.ollama_enabled = value;
+        }
+        if let Some(value) = patch.ollama_base_url {
+            self.ollama_base_url = value;
+        }
+        if let Some(value) = patch.openai_base_url {
+            self.openai_base_url = value;
+        }
+        if let Some(value) = patch.openai_api_key {
+            self.openai_api_key = Some(value);
+        }
+    }
+}
+
+impl Default for ProvidersConfig {
+    fn default() -> Self {
+        Self {
+            ollama_enabled: true,
+            ollama_base_url: "http://127.0.0.1:11434".to_owned(),
+            openai_base_url: "https://api.openai.com/v1".to_owned(),
+            openai_api_key: None,
+        }
+    }
+}
+
+/// API authentication settings.
+///
+/// `None` leaves the API open (development default); `Some` enforces Bearer
+/// authentication on versioned endpoints.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AuthConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    token: Option<SecretString>,
+}
+
+impl AuthConfig {
+    /// Returns the required Bearer token, if any.
+    #[must_use]
+    pub fn token(&self) -> Option<&SecretString> {
+        self.token.as_ref()
+    }
+
+    fn apply(&mut self, patch: AuthConfigPatch) {
+        if let Some(value) = patch.token {
+            self.token = Some(value);
+        }
+    }
+}
+
+fn is_http_url(value: &str) -> bool {
+    value.starts_with("http://") || value.starts_with("https://")
 }
 
 /// Logging and distributed-tracing settings.
@@ -369,6 +673,10 @@ pub struct ConfigPatch {
     pub(crate) environment: Option<RuntimeEnvironment>,
     pub(crate) control_plane: Option<ControlPlaneConfigPatch>,
     pub(crate) worker: Option<WorkerConfigPatch>,
+    pub(crate) storage: Option<StorageConfigPatch>,
+    pub(crate) operator: Option<OperatorConfigPatch>,
+    pub(crate) providers: Option<ProvidersConfigPatch>,
+    pub(crate) auth: Option<AuthConfigPatch>,
     pub(crate) telemetry: Option<TelemetryConfigPatch>,
     pub(crate) shutdown_grace_period: Option<HumanDuration>,
 }
@@ -392,6 +700,34 @@ impl ConfigPatch {
     #[must_use]
     pub fn with_worker(mut self, worker: WorkerConfigPatch) -> Self {
         self.worker = Some(worker);
+        self
+    }
+
+    /// Applies durable-storage overrides.
+    #[must_use]
+    pub fn with_storage(mut self, storage: StorageConfigPatch) -> Self {
+        self.storage = Some(storage);
+        self
+    }
+
+    /// Applies operator-loop overrides.
+    #[must_use]
+    pub fn with_operator(mut self, operator: OperatorConfigPatch) -> Self {
+        self.operator = Some(operator);
+        self
+    }
+
+    /// Applies provider-connectivity overrides.
+    #[must_use]
+    pub fn with_providers(mut self, providers: ProvidersConfigPatch) -> Self {
+        self.providers = Some(providers);
+        self
+    }
+
+    /// Applies API-authentication overrides.
+    #[must_use]
+    pub fn with_auth(mut self, auth: AuthConfigPatch) -> Self {
+        self.auth = Some(auth);
         self
     }
 
@@ -470,6 +806,102 @@ impl WorkerConfigPatch {
     #[must_use]
     pub const fn with_lease_timeout(mut self, timeout: HumanDuration) -> Self {
         self.lease_timeout = Some(timeout);
+        self
+    }
+}
+
+/// Partial durable-storage configuration.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StorageConfigPatch {
+    pub(crate) data_dir: Option<PathBuf>,
+}
+
+impl StorageConfigPatch {
+    /// Overrides the database directory.
+    #[must_use]
+    pub fn with_data_dir(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.data_dir = Some(dir.into());
+        self
+    }
+}
+
+/// Partial operator-loop configuration.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OperatorConfigPatch {
+    pub(crate) reconcile_interval: Option<HumanDuration>,
+    pub(crate) dispatch_interval: Option<HumanDuration>,
+}
+
+impl OperatorConfigPatch {
+    /// Overrides the reconcile cadence.
+    #[must_use]
+    pub const fn with_reconcile_interval(mut self, interval: HumanDuration) -> Self {
+        self.reconcile_interval = Some(interval);
+        self
+    }
+
+    /// Overrides the dispatch cadence.
+    #[must_use]
+    pub const fn with_dispatch_interval(mut self, interval: HumanDuration) -> Self {
+        self.dispatch_interval = Some(interval);
+        self
+    }
+}
+
+/// Partial provider-connectivity configuration.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProvidersConfigPatch {
+    pub(crate) ollama_enabled: Option<bool>,
+    pub(crate) ollama_base_url: Option<String>,
+    pub(crate) openai_base_url: Option<String>,
+    pub(crate) openai_api_key: Option<SecretString>,
+}
+
+impl ProvidersConfigPatch {
+    /// Enables or disables the local Ollama provider.
+    #[must_use]
+    pub const fn with_ollama_enabled(mut self, enabled: bool) -> Self {
+        self.ollama_enabled = Some(enabled);
+        self
+    }
+
+    /// Overrides the Ollama base URL.
+    #[must_use]
+    pub fn with_ollama_base_url(mut self, url: impl Into<String>) -> Self {
+        self.ollama_base_url = Some(url.into());
+        self
+    }
+
+    /// Overrides the OpenAI-compatible base URL.
+    #[must_use]
+    pub fn with_openai_base_url(mut self, url: impl Into<String>) -> Self {
+        self.openai_base_url = Some(url.into());
+        self
+    }
+
+    /// Sets the OpenAI API key.
+    #[must_use]
+    pub fn with_openai_api_key(mut self, key: SecretString) -> Self {
+        self.openai_api_key = Some(key);
+        self
+    }
+}
+
+/// Partial API-authentication configuration.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AuthConfigPatch {
+    pub(crate) token: Option<SecretString>,
+}
+
+impl AuthConfigPatch {
+    /// Sets the required Bearer token.
+    #[must_use]
+    pub fn with_token(mut self, token: SecretString) -> Self {
+        self.token = Some(token);
         self
     }
 }

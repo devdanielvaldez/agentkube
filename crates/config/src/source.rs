@@ -1,6 +1,6 @@
 use crate::{
     ConfigError, ConfigPatch, ControlPlaneConfigPatch, LogLevel, RuntimeEnvironment, SamplingRatio,
-    TelemetryConfigPatch, WorkerConfigPatch,
+    SecretString, TelemetryConfigPatch, WorkerConfigPatch,
 };
 use std::{
     collections::BTreeMap,
@@ -169,6 +169,34 @@ impl ConfigSource for EnvironmentSource {
                 "WORKER__LEASE_TIMEOUT" => {
                     worker_patch(&mut patch).lease_timeout = Some(parse(self, full_key, value)?)
                 }
+                "STORAGE__DATA_DIR" => {
+                    storage_patch(&mut patch).data_dir = Some(parse(self, full_key, value)?)
+                }
+                "OPERATOR__RECONCILE_INTERVAL" => {
+                    operator_patch(&mut patch).reconcile_interval =
+                        Some(parse(self, full_key, value)?)
+                }
+                "OPERATOR__DISPATCH_INTERVAL" => {
+                    operator_patch(&mut patch).dispatch_interval =
+                        Some(parse(self, full_key, value)?)
+                }
+                "PROVIDERS__OLLAMA_ENABLED" => {
+                    providers_patch(&mut patch).ollama_enabled =
+                        Some(parse_bool(self, full_key, value)?)
+                }
+                "PROVIDERS__OLLAMA_BASE_URL" => {
+                    providers_patch(&mut patch).ollama_base_url = Some(value.clone())
+                }
+                "PROVIDERS__OPENAI_BASE_URL" => {
+                    providers_patch(&mut patch).openai_base_url = Some(value.clone())
+                }
+                "PROVIDERS__OPENAI_API_KEY" => {
+                    providers_patch(&mut patch).openai_api_key =
+                        Some(parse_secret(self, full_key, value)?)
+                }
+                "AUTH__TOKEN" => {
+                    auth_patch(&mut patch).token = Some(parse_secret(self, full_key, value)?)
+                }
                 "TELEMETRY__SERVICE_NAME" => {
                     telemetry_patch(&mut patch).service_name = Some(value.clone())
                 }
@@ -212,6 +240,30 @@ fn control_plane_patch(patch: &mut ConfigPatch) -> &mut ControlPlaneConfigPatch 
 
 fn worker_patch(patch: &mut ConfigPatch) -> &mut WorkerConfigPatch {
     patch.worker.get_or_insert_with(WorkerConfigPatch::default)
+}
+
+fn storage_patch(patch: &mut ConfigPatch) -> &mut crate::StorageConfigPatch {
+    patch
+        .storage
+        .get_or_insert_with(crate::StorageConfigPatch::default)
+}
+
+fn operator_patch(patch: &mut ConfigPatch) -> &mut crate::OperatorConfigPatch {
+    patch
+        .operator
+        .get_or_insert_with(crate::OperatorConfigPatch::default)
+}
+
+fn providers_patch(patch: &mut ConfigPatch) -> &mut crate::ProvidersConfigPatch {
+    patch
+        .providers
+        .get_or_insert_with(crate::ProvidersConfigPatch::default)
+}
+
+fn auth_patch(patch: &mut ConfigPatch) -> &mut crate::AuthConfigPatch {
+    patch
+        .auth
+        .get_or_insert_with(crate::AuthConfigPatch::default)
 }
 
 fn telemetry_patch(patch: &mut ConfigPatch) -> &mut TelemetryConfigPatch {
@@ -279,6 +331,17 @@ fn parse_bool(source: &EnvironmentSource, key: &str, value: &str) -> Result<bool
             "expected a boolean",
         )),
     }
+}
+
+/// Parses a secret without ever echoing its value into diagnostics.
+fn parse_secret(
+    source: &EnvironmentSource,
+    key: &str,
+    value: &str,
+) -> Result<SecretString, ConfigError> {
+    value
+        .parse()
+        .map_err(|_| ConfigError::invalid_value(source.name(), key, "***", "must not be empty"))
 }
 
 fn parse_sampling_ratio(
