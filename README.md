@@ -117,6 +117,23 @@ The project is organized as a Cargo workspace. Shared functionality lives in
 small crates with explicit responsibilities, infrastructure-independent domain
 types, documented public APIs, and tests at module and public-contract levels.
 
+## Install
+
+Prebuilt `akctl` + `agentkube-api` installers for macOS, Linux, and Windows:
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/devdanielvaldez/agentkube/main/install.sh | bash
+```
+
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/devdanielvaldez/agentkube/main/install.ps1 | iex
+```
+
+Full guide (pinned versions, manual downloads, checksums, source build,
+uninstall): [docs/install.md](docs/install.md).
+
 ## CLI usage (`akctl`)
 
 ```bash

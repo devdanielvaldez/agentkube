@@ -1,0 +1,182 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to package (e.g. v0.1.0). Defaults to workspace version."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: build (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: macos-13
+            target: x86_64-apple-darwin
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.85
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.85"
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "value=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          elif [[ -n "${{ inputs.version }}" ]]; then
+            VER="${{ inputs.version }}"
+            [[ "$VER" == v* ]] || VER="v$VER"
+            echo "value=$VER" >> "$GITHUB_OUTPUT"
+          else
+            VER="v$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+            # Fallback to the workspace version when the root package has none.
+            if [[ -z "$VER" || "$VER" == "v" ]]; then
+              VER="v$(grep -m1 '^version' Cargo.lock | sed 's/.*"\(.*\)"/\1/')"
+            fi
+            echo "value=$VER" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Resolved: $(grep value "$GITHUB_OUTPUT")"
+
+      - name: Build release binaries
+        shell: bash
+        run: cargo build --locked --release -p agentkube-cli -p agentkube-api --target "${{ matrix.target }}"
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          BIN="target/${{ matrix.target }}/release/akctl"
+          if [[ "${{ matrix.target }}" == *-windows-* ]]; then
+            BIN="$BIN.exe"
+          fi
+          "$BIN" version
+          "$BIN" --help | head -n 5
+
+      - name: Package (unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          STAGE="dist/stage"
+          mkdir -p "$STAGE" dist
+          cp "target/$TARGET/release/akctl" "$STAGE/"
+          cp "target/$TARGET/release/agentkube-api" "$STAGE/"
+          cp LICENSE "$STAGE/"
+          ASSET="agentkube-${VERSION}-${TARGET}.tar.gz"
+          tar -czf "dist/$ASSET" -C "$STAGE" akctl agentkube-api LICENSE
+          if command -v sha256sum >/dev/null 2>&1; then
+            (cd dist && sha256sum "$ASSET" > "$ASSET.sha256")
+          else
+            (cd dist && shasum -a 256 "$ASSET" > "$ASSET.sha256")
+          fi
+          ls -la dist
+
+      - name: Package (windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          STAGE="dist/stage"
+          mkdir -p "$STAGE" dist
+          cp "target/$TARGET/release/akctl.exe" "$STAGE/"
+          cp "target/$TARGET/release/agentkube-api.exe" "$STAGE/"
+          cp LICENSE "$STAGE/"
+          ASSET="agentkube-${VERSION}-${TARGET}.zip"
+          powershell -NoProfile -Command "Compress-Archive -Path dist/stage/* -DestinationPath dist/$ASSET -Force"
+          (cd dist && sha256sum "$ASSET" > "$ASSET.sha256" || shasum -a 256 "$ASSET" > "$ASSET.sha256")
+          ls -la dist
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ matrix.target }}
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: publish release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download all packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pkg-*
+          merge-multiple: true
+          path: dist
+
+      - name: Build CHECKSUMS.txt
+        shell: bash
+        run: |
+          cd dist
+          sha256sum agentkube-*.tar.gz agentkube-*.zip > CHECKSUMS.txt
+          cat CHECKSUMS.txt
+          # Verify every per-asset checksum file.
+          for f in *.sha256; do sha256sum -c "$f"; done
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/agentkube-*.tar.gz
+            dist/agentkube-*.zip
+            dist/*.sha256
+            dist/CHECKSUMS.txt
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          body: |
+            ## Install
+
+            ```bash
+            # macOS / Linux
+            curl -fsSL https://raw.githubusercontent.com/devdanielvaldez/agentkube/main/install.sh | bash -s -- ${{ github.ref_name }}
+            ```
+
+            ```powershell
+            # Windows (PowerShell)
+            irm https://raw.githubusercontent.com/devdanielvaldez/agentkube/main/install.ps1 | iex
+            # then: & ./install.ps1 -Version ${{ github.ref_name }}
+            ```
+
+            Full guide: [docs/install.md](https://github.com/devdanielvaldez/agentkube/blob/${{ github.ref_name }}/docs/install.md)
+
+            Verify checksums with `CHECKSUMS.txt` or the per-asset `.sha256` files.
