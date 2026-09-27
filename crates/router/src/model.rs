@@ -1,8 +1,8 @@
 use agentkube_agents::{ModelName, ModelPolicy, ProviderName};
 use agentkube_core::HumanDuration;
 use agentkube_providers::{
-    CostEstimate, GenerationRequest, GenerationResponse, ModelEventStream, ProviderError,
-    ProviderFuture, StreamEvent,
+    CostEstimate, GenerationRequest, GenerationResponse, GenerationUsage, ModelEventStream,
+    ProviderError, ProviderFuture, StreamEvent,
 };
 use agentkube_tasks::PrivacyRequirement;
 use std::{error::Error, fmt, num::NonZeroU32};
@@ -220,6 +220,8 @@ pub struct RouteDecision {
     model: ModelName,
     estimated_cost: CostEstimate,
     profile: ModelRoutingProfile,
+    input_price: u64,
+    output_price: u64,
 }
 
 impl RouteDecision {
@@ -228,12 +230,16 @@ impl RouteDecision {
         model: ModelName,
         estimated_cost: CostEstimate,
         profile: ModelRoutingProfile,
+        input_price: u64,
+        output_price: u64,
     ) -> Self {
         Self {
             provider,
             model,
             estimated_cost,
             profile,
+            input_price,
+            output_price,
         }
     }
 
@@ -260,6 +266,24 @@ impl RouteDecision {
     pub const fn profile(&self) -> &ModelRoutingProfile {
         &self.profile
     }
+
+    /// Calculates list-price cost for actual provider token usage.
+    ///
+    /// Cached input is conservatively charged at the normal input rate because
+    /// provider-specific cache discounts do not belong in the portable model.
+    #[must_use]
+    pub fn list_cost_for_usage(&self, usage: GenerationUsage) -> Option<u64> {
+        let input = priced_tokens(usage.input_tokens(), self.input_price)?;
+        let output = priced_tokens(usage.output_tokens(), self.output_price)?;
+        input.checked_add(output)
+    }
+}
+
+fn priced_tokens(tokens: u64, price_per_million: u64) -> Option<u64> {
+    let numerator = u128::from(tokens)
+        .checked_mul(u128::from(price_per_million))?
+        .checked_add(999_999)?;
+    u64::try_from(numerator / 1_000_000).ok()
 }
 
 /// Successful response paired with its auditable route.

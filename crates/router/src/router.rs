@@ -113,6 +113,8 @@ impl ModelRouter {
                         model_name.clone(),
                         estimate,
                         profile.clone(),
+                        capabilities.input_price(),
+                        capabilities.output_price(),
                     ),
                     health_rank,
                 });

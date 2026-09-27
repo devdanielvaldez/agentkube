@@ -1,0 +1,15 @@
+[package]
+name = "agentkube-workers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Reliable worker execution and runtime coordination for AgentKube"
+
+[dependencies]
+agentkube-agents = { path = "../agents" }
+agentkube-core = { path = "../core" }
+agentkube-providers = { path = "../providers" }
+agentkube-queue = { path = "../queue" }
+agentkube-router = { path = "../router" }
+agentkube-tasks = { path = "../tasks" }

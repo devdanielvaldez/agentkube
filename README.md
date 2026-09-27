@@ -79,9 +79,9 @@ The repository currently contains the foundational Rust workspace:
 | `agentkube-queue` | Priority dispatch, delayed delivery, leases, and recovery | Implemented |
 | `agentkube-providers` | Model inference contracts, normalized errors, streaming, and capabilities | Implemented |
 | `agentkube-router` | Health, privacy, capability, cost-aware routing, and failover | Implemented |
+| `agentkube-workers` | Atomic execution, runtime integration, heartbeats, and settlement | Implemented |
 
-The next milestone is workers, followed by scheduling, reconciliation, API,
-and CLI.
+The next milestone is scheduling, followed by reconciliation, API, and CLI.
 
 The complete technical vision is documented in
 [docs/architecture.md](docs/architecture.md).
