@@ -1,0 +1,21 @@
+[package]
+name = "agentkube-sqlite"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Durable SQLite repositories implementing AgentKube storage ports"
+
+[dependencies]
+agentkube-agents = { path = "../agents" }
+agentkube-core = { path = "../core" }
+agentkube-storage = { path = "../storage" }
+agentkube-tasks = { path = "../tasks" }
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile = "3"
+tokio.workspace = true

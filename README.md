@@ -76,6 +76,7 @@ The repository currently contains the foundational Rust workspace:
 | `agentkube-agents` | Agent definitions, deployments, policies, and lifecycle state | Implemented |
 | `agentkube-tasks` | Task requirements, budgets, retries, results, and lifecycle state | Implemented |
 | `agentkube-storage` | Async repository ports, optimistic concurrency, and in-memory storage | Implemented |
+| `agentkube-sqlite` | Durable SQLite repositories with WAL and crash-safe boot recovery | Implemented |
 | `agentkube-queue` | Priority dispatch, delayed delivery, leases, and recovery | Implemented |
 | `agentkube-providers` | Model inference contracts, normalized errors, streaming, and capabilities | Implemented |
 | `agentkube-router` | Health, privacy, capability, cost-aware routing, and failover | Implemented |
