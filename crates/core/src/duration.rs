@@ -37,11 +37,11 @@ impl fmt::Display for HumanDuration {
         const MINUTE_MS: u128 = 60_000;
         const SECOND_MS: u128 = 1_000;
 
-        if milliseconds % HOUR_MS == 0 {
+        if milliseconds.is_multiple_of(HOUR_MS) {
             write!(formatter, "{}h", milliseconds / HOUR_MS)
-        } else if milliseconds % MINUTE_MS == 0 {
+        } else if milliseconds.is_multiple_of(MINUTE_MS) {
             write!(formatter, "{}m", milliseconds / MINUTE_MS)
-        } else if milliseconds % SECOND_MS == 0 {
+        } else if milliseconds.is_multiple_of(SECOND_MS) {
             write!(formatter, "{}s", milliseconds / SECOND_MS)
         } else {
             write!(formatter, "{milliseconds}ms")

@@ -121,11 +121,11 @@ pub async fn update_notice_with(
     now: u64,
 ) -> Option<String> {
     let cached = cache_path.and_then(read_cache);
-    if let Some(state) = &cached {
-        if now.saturating_sub(state.checked_at) < ttl.as_secs() {
-            return is_newer_version(current_version, &state.latest)
-                .then(|| format_notice(current_version, &state.latest));
-        }
+    if let Some(state) = &cached
+        && now.saturating_sub(state.checked_at) < ttl.as_secs()
+    {
+        return is_newer_version(current_version, &state.latest)
+            .then(|| format_notice(current_version, &state.latest));
     }
     match fetch_latest(url, current_version).await {
         Some(latest) => {
@@ -201,10 +201,10 @@ fn read_cache(path: &Path) -> Option<CacheState> {
 }
 
 fn write_cache(path: &Path, state: &CacheState) {
-    if let Some(parent) = path.parent() {
-        if std::fs::create_dir_all(parent).is_err() {
-            return;
-        }
+    if let Some(parent) = path.parent()
+        && std::fs::create_dir_all(parent).is_err()
+    {
+        return;
     }
     if let Ok(text) = serde_json::to_string(state) {
         let _ = std::fs::write(path, text);
