@@ -42,6 +42,7 @@ pub async fn execute(
     match command {
         Command::Version => run_version(config),
         Command::Health => run_health(client, config).await,
+        Command::Status => run_status(client, config).await,
         Command::Apply { file, dry_run } => run_apply(client, config, &file, dry_run).await,
         Command::Get {
             resource,
@@ -92,6 +93,47 @@ async fn run_health(client: &ApiClient, config: &ResolvedConfig) -> Result<(), C
         OutputMode::Yaml => output::print_yaml(&serde_json::json!({
             "health": health,
             "ready": ready,
+        })),
+    }
+}
+
+async fn run_status(client: &ApiClient, config: &ResolvedConfig) -> Result<(), CliError> {
+    let health = client.health().await?;
+    let ready = client.ready().await?;
+    let agents = client.list_all_agents(None, None).await?;
+    let deployments = client.list_all_deployments(None, None).await?;
+    let tasks = client.list_all_tasks(None, None).await?;
+    match output_for_get(config) {
+        OutputMode::Table => output::print_status_table(
+            client.base_url(),
+            &health,
+            &ready,
+            &agents,
+            &deployments,
+            &tasks,
+            config.no_color,
+        ),
+        OutputMode::Json => output::print_json(&serde_json::json!({
+            "server": {
+                "url": client.base_url(),
+                "health": health,
+                "ready": ready,
+            },
+            "summary": output::summarize_status(&agents, &deployments, &tasks),
+            "agents": agents,
+            "deployments": deployments,
+            "tasks": tasks,
+        })),
+        OutputMode::Yaml => output::print_yaml(&serde_json::json!({
+            "server": {
+                "url": client.base_url(),
+                "health": health,
+                "ready": ready,
+            },
+            "summary": output::summarize_status(&agents, &deployments, &tasks),
+            "agents": agents,
+            "deployments": deployments,
+            "tasks": tasks,
         })),
     }
 }

@@ -441,6 +441,44 @@ async fn task_apply_is_queued_and_non_terminal_delete_conflicts() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn status_shows_everything_running_prettily() {
+    let server = spawn_server().await;
+    for manifest in [AGENT_YAML, DEPLOYMENT_YAML, TASK_YAML] {
+        let file = write_temp(manifest);
+        akctl()
+            .args([
+                "--server",
+                &server.base_url,
+                "apply",
+                "-f",
+                file.path().to_str().unwrap(),
+            ])
+            .assert()
+            .success();
+    }
+
+    akctl()
+        .args(["--server", &server.base_url, "status"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("Server:"))
+        .stdout(predicates::str::contains(&server.base_url))
+        .stdout(predicates::str::contains("AGENTS (1)"))
+        .stdout(predicates::str::contains(
+            "DEPLOYMENTS (1, desired 2, ready 0)",
+        ))
+        .stdout(predicates::str::contains("TASKS (1, QUEUED 1)"))
+        .stdout(predicates::str::contains("backend-agent"));
+
+    akctl()
+        .args(["--server", &server.base_url, "-o", "json", "status"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"summary\""))
+        .stdout(predicates::str::contains("backend-agent"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn multi_doc_partial_apply_reports_exit_3_without_rollback_claim() {
     let server = spawn_server().await;
     // Second document duplicates the first task name, forcing a 409 after one success.

@@ -148,6 +148,7 @@ uninstall): [docs/install.md](docs/install.md).
 
 ```bash
 cargo run -p agentkube-api --bin agentkube-api &
+cargo run -p agentkube-cli --bin akctl -- status
 cargo run -p agentkube-cli --bin akctl -- health
 cargo run -p agentkube-cli --bin akctl -- apply -f agents.yaml
 cargo run -p agentkube-cli --bin akctl -- get agents

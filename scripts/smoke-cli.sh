@@ -178,6 +178,10 @@ expect_out "flags after subcommand" "QUEUED" -- get tasks -o json
 expect_out "describe task" "review-code" -- describe task review-code
 expect_code 1 "queued task delete conflicts" -- delete task review-code
 
+# status aggregates everything running (3 agents, 1 deployment, 1 task)
+expect_out "status overview" "TASKS (1, QUEUED 1)" -- status
+expect_out "status json" '"desiredReplicas": 3' -- -o json status
+
 # dry-run, invalid docs, missing resources
 { cat "$TMPDIR/agent.yaml"; printf '\n---\n'; cat "$TMPDIR/task.yaml"; } > "$TMPDIR/multi.yaml"
 expect_out "dry-run multi-doc" "validated" -- apply -f "$TMPDIR/multi.yaml" --dry-run=client

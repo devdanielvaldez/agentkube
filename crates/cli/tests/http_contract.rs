@@ -182,6 +182,54 @@ async fn bearer_tokens_are_sent_without_leaking_into_diagnostics() {
 }
 
 #[tokio::test]
+async fn status_summary_aggregates_agents_deployments_and_tasks() {
+    let server = spawn_server().await;
+    let client = test_client(&server.base_url);
+
+    client.create_agent(&agent_document("web")).await.unwrap();
+    client
+        .create_deployment(&deployment_document("web", 2))
+        .await
+        .unwrap();
+    client.create_task(&task_document("job")).await.unwrap();
+
+    let agents = client.list_all_agents(None, None).await.unwrap();
+    let deployments = client.list_all_deployments(None, None).await.unwrap();
+    let tasks = client.list_all_tasks(None, None).await.unwrap();
+    let summary = agentkube_cli::output::summarize_status(&agents, &deployments, &tasks);
+    assert_eq!(summary.agents, 1);
+    assert_eq!(summary.deployments, 1);
+    assert_eq!(summary.desired_replicas, 2);
+    assert_eq!(summary.ready_replicas, 0);
+    assert_eq!(summary.tasks_by_state.get("QUEUED"), Some(&1));
+
+    let health = client.health().await.unwrap();
+    let ready = client.ready().await.unwrap();
+    let rendered = agentkube_cli::output::render_status_table(
+        &server.base_url,
+        &health,
+        &ready,
+        &agents,
+        &deployments,
+        &tasks,
+        true,
+    );
+    for needle in [
+        "Server:",
+        "AGENTS (1)",
+        "DEPLOYMENTS (1, desired 2, ready 0)",
+        "TASKS (1, QUEUED 1)",
+        "web",
+        "job",
+    ] {
+        assert!(
+            rendered.contains(needle),
+            "missing {needle:?} in:\n{rendered}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn task_apply_returns_queued_state() {
     let server = spawn_server().await;
     let client = test_client(&server.base_url);

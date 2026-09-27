@@ -308,6 +308,135 @@ pub fn print_health_table(
     )
 }
 
+/// Aggregate counts for the `akctl status` overview.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatusSummary {
+    /// Number of agents.
+    pub agents: usize,
+    /// Number of deployments.
+    pub deployments: usize,
+    /// Sum of desired replicas across deployments.
+    pub desired_replicas: u64,
+    /// Sum of ready replicas across deployments.
+    pub ready_replicas: u64,
+    /// Task counts keyed by wire state (for example `QUEUED`).
+    pub tasks_by_state: std::collections::BTreeMap<String, u64>,
+}
+
+/// Computes aggregate counts for a status overview.
+#[must_use]
+pub fn summarize_status(
+    agents: &[AgentDocument],
+    deployments: &[AgentDeploymentDocument],
+    tasks: &[TaskDocument],
+) -> StatusSummary {
+    let mut desired_replicas = 0u64;
+    let mut ready_replicas = 0u64;
+    for document in deployments {
+        let (desired, ready) = deployment_desired_ready(document);
+        desired_replicas += desired;
+        ready_replicas += ready;
+    }
+    let mut tasks_by_state = std::collections::BTreeMap::new();
+    for document in tasks {
+        *tasks_by_state.entry(task_state(document)).or_insert(0) += 1;
+    }
+    StatusSummary {
+        agents: agents.len(),
+        deployments: deployments.len(),
+        desired_replicas,
+        ready_replicas,
+        tasks_by_state,
+    }
+}
+
+fn deployment_desired_ready(document: &AgentDeploymentDocument) -> (u64, u64) {
+    let desired = u64::from(document.spec().replicas().get());
+    let ready = document
+        .status()
+        .map_or(0, |status| u64::from(status.ready_replicas().get()));
+    (desired, ready)
+}
+
+/// Renders the pretty `akctl status` dashboard.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn render_status_table(
+    server_url: &str,
+    health: &crate::client::HealthResponse,
+    ready: &crate::client::HealthResponse,
+    agents: &[AgentDocument],
+    deployments: &[AgentDeploymentDocument],
+    tasks: &[TaskDocument],
+    no_color: bool,
+) -> String {
+    let summary = summarize_status(agents, deployments, tasks);
+    let mut output = format!(
+        "Server: {server_url} (health: {}, ready: {}, version: {})",
+        health.status, ready.status, health.version
+    );
+    output.push_str(&format!("\n\nAGENTS ({})\n", summary.agents));
+    if agents.is_empty() {
+        output.push_str("(none)\n");
+    } else {
+        output.push_str(&render_agents_table(agents, no_color));
+        output.push('\n');
+    }
+    output.push_str(&format!(
+        "\nDEPLOYMENTS ({}, desired {}, ready {})\n",
+        summary.deployments, summary.desired_replicas, summary.ready_replicas
+    ));
+    if deployments.is_empty() {
+        output.push_str("(none)\n");
+    } else {
+        output.push_str(&render_deployments_table(deployments, no_color));
+        output.push('\n');
+    }
+    let mut task_header = format!("{}", tasks.len());
+    if !summary.tasks_by_state.is_empty() {
+        let states: Vec<String> = summary
+            .tasks_by_state
+            .iter()
+            .map(|(state, count)| format!("{state} {count}"))
+            .collect();
+        task_header.push_str(&format!(", {}", states.join(", ")));
+    }
+    output.push_str(&format!("\nTASKS ({task_header})\n"));
+    if tasks.is_empty() {
+        output.push_str("(none)\n");
+    } else {
+        output.push_str(&render_tasks_table(tasks, no_color));
+        output.push('\n');
+    }
+    output.trim_end().to_owned()
+}
+
+/// Prints the pretty `akctl status` dashboard to stdout.
+#[allow(clippy::too_many_arguments)]
+pub fn print_status_table(
+    server_url: &str,
+    health: &crate::client::HealthResponse,
+    ready: &crate::client::HealthResponse,
+    agents: &[AgentDocument],
+    deployments: &[AgentDeploymentDocument],
+    tasks: &[TaskDocument],
+    no_color: bool,
+) -> Result<(), CliError> {
+    write_stdout(
+        &render_status_table(
+            server_url,
+            health,
+            ready,
+            agents,
+            deployments,
+            tasks,
+            no_color,
+        ),
+        true,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

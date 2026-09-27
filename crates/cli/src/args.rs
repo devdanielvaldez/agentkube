@@ -171,6 +171,8 @@ pub enum Command {
     Version,
     /// Check API liveness and readiness.
     Health,
+    /// Show a pretty overview of everything running.
+    Status,
     /// Create or update resources from a JSON/YAML file or stdin.
     Apply {
         /// Resource file path, or - for stdin.
