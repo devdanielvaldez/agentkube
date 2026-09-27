@@ -83,12 +83,11 @@ The repository currently contains the foundational Rust workspace:
 | `agentkube-scheduler` | Constraint filtering, explainable scoring, and deterministic placement | Implemented |
 | `agentkube-controllers` | Idempotent deployment and agent-status reconciliation | Implemented |
 | `agentkube-api` | Versioned HTTP CRUD, pagination, health checks, and task dispatch | Implemented |
-
-The next milestone is the CLI.
+| `agentkube-cli` | `akctl` HTTP client: health, apply, get/describe, delete, scale, tables/JSON/YAML | Implemented |
 
 The complete technical vision is documented in
 [docs/architecture.md](docs/architecture.md).
-The implementation contract for the remaining CLI module is documented in
+The implementation contract for the CLI module is documented in
 [docs/cli-module.md](docs/cli-module.md).
 
 ## Development
@@ -118,18 +117,25 @@ The project is organized as a Cargo workspace. Shared functionality lives in
 small crates with explicit responsibilities, infrastructure-independent domain
 types, documented public APIs, and tests at module and public-contract levels.
 
-## Planned CLI experience
+## CLI usage (`akctl`)
 
 ```bash
-agentkube init
-akctl apply -f agents.yaml
-akctl get agents
-akctl get tasks
-akctl logs backend-agent --follow
-akctl scale backend-agent --replicas=10
+cargo run -p agentkube-api --bin agentkube-api &
+cargo run -p agentkube-cli --bin akctl -- health
+cargo run -p agentkube-cli --bin akctl -- apply -f agents.yaml
+cargo run -p agentkube-cli --bin akctl -- get agents
+cargo run -p agentkube-cli --bin akctl -- get deployments
+cargo run -p agentkube-cli --bin akctl -- get tasks
+cargo run -p agentkube-cli --bin akctl -- describe agent backend-agent
+cargo run -p agentkube-cli --bin akctl -- delete agent backend-agent
+cargo run -p agentkube-cli --bin akctl -- scale deployment workers --replicas 4
 ```
 
-These commands represent the intended interface and are not implemented yet.
+Useful flags: `--server http://127.0.0.1:8080` (or `AGENTKUBE_SERVER`),
+`--timeout 30s`, `-o table|json|yaml`, `--no-color`, `-v`, and
+`apply --dry-run=client` for client-side validation without requests.
+`describe` defaults to YAML while `get` honors the requested output mode.
+See `akctl --help` for the full contract.
 
 ## Contributing
 
