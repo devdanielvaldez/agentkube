@@ -18,6 +18,20 @@ your platform (macOS arm64/x86_64, Linux x86_64/arm64). The formula is bumped
 automatically on every release, so upgrading is the same command again (or
 `brew reinstall <url>`).
 
+## Update notifications
+
+`akctl` checks the latest GitHub release once a day and prints a notice to
+stderr when an upgrade exists. The result is cached under `~/.cache/akctl`
+(`%LOCALAPPDATA%\akctl` on Windows), the check never takes more than ~2
+seconds, and it fails silently when offline — commands and their JSON/YAML
+stdout are never affected.
+
+Disable it:
+
+```bash
+export AGENTKUBE_NO_UPDATE_CHECK=1
+```
+
 ## Quick install (script)
 
 ### macOS (Apple Silicon and Intel)

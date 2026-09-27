@@ -138,6 +138,8 @@ irm https://raw.githubusercontent.com/devdanielvaldez/agentkube/main/install.ps1
 
 Full guide (pinned versions, manual downloads, checksums, source build,
 uninstall): [docs/install.md](docs/install.md).
+`akctl` notifies on stderr when a newer release exists (daily cached check;
+`AGENTKUBE_NO_UPDATE_CHECK=1` disables it).
 
 ## CLI usage (`akctl`)
 

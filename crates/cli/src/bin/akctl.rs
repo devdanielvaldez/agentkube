@@ -4,7 +4,7 @@
 //! and exit-code conversion live here. All business logic remains in the
 //! library crate so it can be tested directly.
 
-use agentkube_cli::{args::Cli, client::ApiClient, command, config, error::CliError};
+use agentkube_cli::{args::Cli, client::ApiClient, command, config, error::CliError, update};
 use clap::Parser;
 
 #[tokio::main]
@@ -14,7 +14,7 @@ async fn main() {
 
 async fn run() -> i32 {
     let cli = Cli::parse();
-    match run_with(cli).await {
+    let code = match run_with(cli).await {
         Ok(()) => 0,
         Err(error) => {
             if error.is_broken_pipe() {
@@ -23,7 +23,11 @@ async fn run() -> i32 {
             eprintln!("akctl: {error}");
             error.exit_code()
         }
+    };
+    if let Some(notice) = update::update_notice(env!("CARGO_PKG_VERSION")).await {
+        eprintln!("{notice}");
     }
+    code
 }
 
 async fn run_with(cli: Cli) -> Result<(), CliError> {

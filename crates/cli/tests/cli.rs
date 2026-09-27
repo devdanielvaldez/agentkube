@@ -37,7 +37,11 @@ async fn spawn_server() -> TestServer {
 }
 
 fn akctl() -> Command {
-    Command::cargo_bin("akctl").unwrap()
+    // Keep binary tests hermetic: never hit the real update endpoint.
+    // The update-check path is covered by dedicated tests below.
+    let mut cmd = Command::cargo_bin("akctl").unwrap();
+    cmd.env("AGENTKUBE_NO_UPDATE_CHECK", "1");
+    cmd
 }
 
 const AGENT_YAML: &str = r#"
@@ -485,4 +489,70 @@ fn broken_pipe_maps_to_clean_exit() {
     assert_eq!(error.exit_code(), 0);
     let io_error = std::io::Error::new(std::io::ErrorKind::BrokenPipe, "closed");
     assert!(agentkube_cli::error::CliError::from_stdout_io("write", &io_error).is_broken_pipe());
+}
+
+async fn mock_update_server(tag: &'static str) -> String {
+    let app = axum::Router::new().route(
+        "/releases/latest",
+        axum::routing::get(
+            move || async move { axum::Json(serde_json::json!({ "tag_name": tag })) },
+        ),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    format!("http://{addr}/releases/latest")
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn update_notice_points_to_new_releases_on_stderr() {
+    let url = mock_update_server("v9.9.9").await;
+    let cache = tempfile::tempdir().unwrap();
+
+    // `version` needs no API server, isolating the update-check path.
+    // Re-enable checks for this command only (the helper disables them).
+    Command::cargo_bin("akctl")
+        .unwrap()
+        .env_remove("AGENTKUBE_NO_UPDATE_CHECK")
+        .env("AGENTKUBE_UPDATE_CHECK_URL", &url)
+        .env("AGENTKUBE_CACHE_DIR", cache.path())
+        .arg("version")
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("akctl"))
+        .stderr(predicates::str::contains("v9.9.9"))
+        .stderr(predicates::str::contains("brew"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn update_notice_stays_silent_when_disabled_or_current() {
+    // Explicit opt-out: no notice even with a newer release available.
+    let url = mock_update_server("v9.9.9").await;
+    let cache = tempfile::tempdir().unwrap();
+    let output = akctl()
+        .env("AGENTKUBE_UPDATE_CHECK_URL", &url)
+        .env("AGENTKUBE_CACHE_DIR", cache.path())
+        .arg("version")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!stderr.contains("new version"), "{stderr}");
+
+    // Current release: no notice even with checks enabled.
+    let current = mock_update_server(concat!("v", env!("CARGO_PKG_VERSION"))).await;
+    let cache = tempfile::tempdir().unwrap();
+    let output = Command::cargo_bin("akctl")
+        .unwrap()
+        .env_remove("AGENTKUBE_NO_UPDATE_CHECK")
+        .env("AGENTKUBE_UPDATE_CHECK_URL", &current)
+        .env("AGENTKUBE_CACHE_DIR", cache.path())
+        .arg("version")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!stderr.contains("new version"), "{stderr}");
 }

@@ -14,3 +14,4 @@ pub mod config;
 pub mod document;
 pub mod error;
 pub mod output;
+pub mod update;
