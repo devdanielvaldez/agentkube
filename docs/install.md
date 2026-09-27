@@ -129,7 +129,7 @@ Expand-Archive agentkube.zip -DestinationPath "$env:LocalAppData\AgentKube\bin" 
 
 ## Build from source
 
-Requires Rust 1.85+.
+Requires Rust 1.88+.
 
 ```bash
 git clone https://github.com/devdanielvaldez/agentkube.git

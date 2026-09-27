@@ -92,7 +92,7 @@ The implementation contract for the CLI module is documented in
 
 ## Development
 
-AgentKube requires Rust 1.85 or newer.
+AgentKube requires Rust 1.88 or newer.
 
 ```bash
 git clone https://github.com/devdanielvaldez/agentkube.git
