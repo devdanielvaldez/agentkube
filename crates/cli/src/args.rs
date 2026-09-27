@@ -140,23 +140,23 @@ impl FromStr for ScaleResource {
 )]
 pub struct Cli {
     /// API base URL (for example http://127.0.0.1:8080).
-    #[arg(long, value_name = "URL")]
+    #[arg(long, value_name = "URL", global = true)]
     pub server: Option<String>,
 
     /// Complete request timeout (for example 30s, 500ms, 1m). Total operation deadline.
-    #[arg(long, value_name = "DURATION", default_value = "30s")]
+    #[arg(long, value_name = "DURATION", default_value = "30s", global = true)]
     pub timeout: String,
 
     /// Output mode: table, json, or yaml. Describe defaults to yaml when unset.
-    #[arg(short, long, value_enum, value_name = "MODE")]
+    #[arg(short, long, value_enum, value_name = "MODE", global = true)]
     pub output: Option<OutputMode>,
 
     /// Disable diagnostic color.
-    #[arg(long)]
+    #[arg(long, global = true)]
     pub no_color: bool,
 
     /// Increase diagnostic verbosity without printing secrets.
-    #[arg(short, long, action = ArgAction::Count)]
+    #[arg(short, long, action = ArgAction::Count, global = true)]
     pub verbose: u8,
 
     /// Subcommand to execute.
@@ -266,6 +266,39 @@ mod tests {
         assert_eq!(cli.timeout, "30s");
         assert!(cli.output.is_none());
         assert!(!cli.no_color);
+    }
+
+    #[test]
+    fn global_options_parse_before_and_after_the_subcommand() {
+        let before = Cli::try_parse_from([
+            "akctl",
+            "--server",
+            "http://x:1",
+            "-o",
+            "json",
+            "get",
+            "tasks",
+        ])
+        .unwrap();
+        assert_eq!(before.output, Some(OutputMode::Json));
+
+        // Same flags after the subcommand (kubectl-style) must also work.
+        let after = Cli::try_parse_from([
+            "akctl",
+            "get",
+            "tasks",
+            "-o",
+            "json",
+            "--server",
+            "http://x:1",
+        ])
+        .unwrap();
+        assert_eq!(after.output, Some(OutputMode::Json));
+        assert_eq!(after.server.as_deref(), Some("http://x:1"));
+        match after.command {
+            Command::Get { resource, .. } => assert_eq!(resource, GetResource::Tasks),
+            other => panic!("expected get, got {other:?}"),
+        }
     }
 
     #[test]
