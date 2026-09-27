@@ -174,6 +174,7 @@ expect_code 1 "scale missing deployment" -- scale deployment missing --replicas 
 # tasks: create (QUEUED), read, lifecycle-guarded delete
 expect_out "apply task" "created" -- apply -f "$TMPDIR/task.yaml"
 expect_out "task is QUEUED" "QUEUED" -- get tasks
+expect_out "flags after subcommand" "QUEUED" -- get tasks -o json
 expect_out "describe task" "review-code" -- describe task review-code
 expect_code 1 "queued task delete conflicts" -- delete task review-code
 
