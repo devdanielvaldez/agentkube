@@ -1,0 +1,12 @@
+[package]
+name = "agentkube-queue"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Reliable task queue contracts and in-memory backend for AgentKube"
+
+[dependencies]
+agentkube-core = { path = "../core" }
+agentkube-tasks = { path = "../tasks" }
+uuid.workspace = true

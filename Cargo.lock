@@ -44,6 +44,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentkube-queue"
+version = "0.1.0"
+dependencies = [
+ "agentkube-core",
+ "agentkube-tasks",
+ "uuid",
+]
+
+[[package]]
 name = "agentkube-storage"
 version = "0.1.0"
 dependencies = [
