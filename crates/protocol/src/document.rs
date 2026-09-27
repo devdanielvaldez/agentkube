@@ -38,7 +38,7 @@ pub struct ResourceDocument<Spec, Status = ()> {
     type_meta: TypeMeta,
     metadata: Metadata,
     spec: Spec,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     status: Option<Status>,
 }
 
@@ -56,6 +56,17 @@ impl<Spec> ResourceDocument<Spec, ()> {
 }
 
 impl<Spec, Status> ResourceDocument<Spec, Status> {
+    /// Creates a typed resource document whose observed status is not present yet.
+    #[must_use]
+    pub const fn without_status(type_meta: TypeMeta, metadata: Metadata, spec: Spec) -> Self {
+        Self {
+            type_meta,
+            metadata,
+            spec,
+            status: None,
+        }
+    }
+
     /// Returns the document type metadata.
     #[must_use]
     pub const fn type_meta(&self) -> &TypeMeta {

@@ -7,9 +7,20 @@ name = "agentkube"
 version = "0.1.0"
 
 [[package]]
+name = "agentkube-agents"
+version = "0.1.0"
+dependencies = [
+ "agentkube-core",
+ "agentkube-protocol",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "agentkube-config"
 version = "0.1.0"
 dependencies = [
+ "agentkube-core",
  "serde",
  "serde_json",
 ]

@@ -1,3 +1,5 @@
+//! Human-readable positive durations shared by declarative resources and runtime configuration.
+
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use std::{error::Error, fmt, str::FromStr, time::Duration};
 

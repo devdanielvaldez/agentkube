@@ -1,12 +1,15 @@
 [package]
-name = "agentkube-config"
+name = "agentkube-agents"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Typed, layered runtime configuration for AgentKube"
+description = "Agent definitions, deployments, and lifecycle state for AgentKube"
 
 [dependencies]
 agentkube-core = { path = "../core" }
+agentkube-protocol = { path = "../protocol" }
 serde.workspace = true
+
+[dev-dependencies]
 serde_json.workspace = true

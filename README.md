@@ -73,9 +73,10 @@ The repository currently contains the foundational Rust workspace:
 | `agentkube-core` | Typed IDs, resource metadata, names, namespaces, and versions | Implemented |
 | `agentkube-protocol` | Declarative documents, API errors, pagination, and watch events | Implemented |
 | `agentkube-config` | Typed layered configuration with validation | Implemented |
+| `agentkube-agents` | Agent definitions, deployments, policies, and lifecycle state | Implemented |
 
-The next milestones are the agent and task domains, followed by persistence,
-task queues, providers, workers, scheduling, reconciliation, API, and CLI.
+The next milestone is the task domain, followed by persistence, task queues,
+providers, workers, scheduling, reconciliation, API, and CLI.
 
 The complete technical vision is documented in
 [docs/architecture.md](docs/architecture.md).

@@ -7,13 +7,12 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
-mod duration;
 mod error;
 mod loader;
 mod model;
 mod source;
 
-pub use duration::{DurationError, DurationErrorKind, HumanDuration};
+pub use agentkube_core::{DurationError, DurationErrorKind, HumanDuration};
 pub use error::{ConfigError, ConfigValidationError};
 pub use loader::ConfigLoader;
 pub use model::{
