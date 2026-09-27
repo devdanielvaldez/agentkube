@@ -82,8 +82,9 @@ The repository currently contains the foundational Rust workspace:
 | `agentkube-workers` | Atomic execution, runtime integration, heartbeats, and settlement | Implemented |
 | `agentkube-scheduler` | Constraint filtering, explainable scoring, and deterministic placement | Implemented |
 | `agentkube-controllers` | Idempotent deployment and agent-status reconciliation | Implemented |
+| `agentkube-api` | Versioned HTTP CRUD, pagination, health checks, and task dispatch | Implemented |
 
-The next milestone is the API, followed by the CLI.
+The next milestone is the CLI.
 
 The complete technical vision is documented in
 [docs/architecture.md](docs/architecture.md).
@@ -100,6 +101,16 @@ cargo test --workspace --all-targets
 cargo clippy --workspace --all-targets -- -D warnings
 cargo doc --workspace --no-deps
 ```
+
+Run the local in-memory API server:
+
+```bash
+cargo run -p agentkube-api --bin agentkube-api
+```
+
+The server listens on `127.0.0.1:8080` by default. Settings can be overridden
+through typed `AGENTKUBE_*` environment variables, such as
+`AGENTKUBE_CONTROL_PLANE__BIND_ADDRESS`.
 
 The project is organized as a Cargo workspace. Shared functionality lives in
 small crates with explicit responsibilities, infrastructure-independent domain
