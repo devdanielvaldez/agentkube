@@ -1,0 +1,11 @@
+apiVersion: agentkube.ai/v1
+kind: Agent
+metadata:
+  name: edge-helper
+spec:
+  role: assistant
+  model:
+    strategy: fixed
+    provider: ollama
+    model: phi3
+  instructions: Answer quick questions on device.

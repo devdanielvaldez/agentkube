@@ -1,0 +1,7 @@
+apiVersion: agentkube.ai/v1
+kind: AgentTask
+metadata:
+  name: summarize-logs
+spec:
+  objective: Summarize yesterday's edge logs.
+  priority: low

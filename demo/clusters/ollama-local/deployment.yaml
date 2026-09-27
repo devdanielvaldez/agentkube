@@ -1,0 +1,13 @@
+apiVersion: agentkube.ai/v1
+kind: AgentDeployment
+metadata:
+  name: local-reviewers
+spec:
+  replicas: 2
+  template:
+    role: reviewer
+    model:
+      strategy: fixed
+      provider: ollama
+      model: qwen2.5-coder
+    instructions: Review pull requests offline.

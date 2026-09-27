@@ -1,0 +1,13 @@
+apiVersion: agentkube.ai/v1
+kind: AgentDeployment
+metadata:
+  name: cloud-writers
+spec:
+  replicas: 3
+  template:
+    role: writer
+    model:
+      strategy: fixed
+      provider: anthropic
+      model: claude-4
+    instructions: Draft documentation pages.

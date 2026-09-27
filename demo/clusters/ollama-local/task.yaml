@@ -1,0 +1,7 @@
+apiVersion: agentkube.ai/v1
+kind: AgentTask
+metadata:
+  name: refactor-auth
+spec:
+  objective: Refactor the auth module without network access.
+  priority: high

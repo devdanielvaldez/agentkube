@@ -1,0 +1,13 @@
+apiVersion: agentkube.ai/v1
+kind: AgentDeployment
+metadata:
+  name: edge-helpers
+spec:
+  replicas: 1
+  template:
+    role: assistant
+    model:
+      strategy: fixed
+      provider: ollama
+      model: phi3
+    instructions: Answer quick questions on device.

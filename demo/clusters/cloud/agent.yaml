@@ -1,0 +1,11 @@
+apiVersion: agentkube.ai/v1
+kind: Agent
+metadata:
+  name: cloud-researcher
+spec:
+  role: researcher
+  model:
+    strategy: fixed
+    provider: openai
+    model: gpt-5
+  instructions: Research topics and summarize findings.

@@ -1,0 +1,11 @@
+apiVersion: agentkube.ai/v1
+kind: Agent
+metadata:
+  name: local-coder
+spec:
+  role: developer
+  model:
+    strategy: fixed
+    provider: ollama
+    model: llama3.1
+  instructions: Write and review code using only local models.

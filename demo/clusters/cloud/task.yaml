@@ -1,0 +1,6 @@
+apiVersion: agentkube.ai/v1
+kind: AgentTask
+metadata:
+  name: draft-release-notes
+spec:
+  objective: Draft the v0.1.0 release notes.
