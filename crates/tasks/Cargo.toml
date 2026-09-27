@@ -1,0 +1,16 @@
+[package]
+name = "agentkube-tasks"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Task specifications, retry policy, and lifecycle state for AgentKube"
+
+[dependencies]
+agentkube-agents = { path = "../agents" }
+agentkube-core = { path = "../core" }
+agentkube-protocol = { path = "../protocol" }
+serde.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
