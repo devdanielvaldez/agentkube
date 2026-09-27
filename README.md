@@ -117,16 +117,14 @@ The project is organized as a Cargo workspace. Shared functionality lives in
 small crates with explicit responsibilities, infrastructure-independent domain
 types, documented public APIs, and tests at module and public-contract levels.
 
-End-to-end CLI smoke test against a throwaway server: `./scripts/smoke-cli.sh`.
-
 ## Install
 
 Prebuilt `akctl` + `agentkube-api` installers for macOS, Linux, and Windows:
 
 ```bash
-# Homebrew (macOS/Linux) — fully qualified: bare `agentkube` resolves to an unrelated cask
+# Homebrew (macOS/Linux)
 brew tap devdanielvaldez/agentkube https://github.com/devdanielvaldez/agentkube
-brew install --formula devdanielvaldez/agentkube/agentkube
+brew install agentkube
 ```
 
 ```bash

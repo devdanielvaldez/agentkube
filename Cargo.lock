@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "agentkube-agents"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "agentkube-core",
  "agentkube-protocol",
@@ -14,7 +14,7 @@ dependencies = [
 
 [[package]]
 name = "agentkube-api"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "agentkube-agents",
  "agentkube-config",
@@ -33,7 +33,7 @@ dependencies = [
 
 [[package]]
 name = "agentkube-cli"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "agentkube-agents",
  "agentkube-api",
@@ -58,7 +58,7 @@ dependencies = [
 
 [[package]]
 name = "agentkube-config"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "agentkube-core",
  "serde",
@@ -67,7 +67,7 @@ dependencies = [
 
 [[package]]
 name = "agentkube-controllers"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "agentkube-agents",
  "agentkube-core",
@@ -76,7 +76,7 @@ dependencies = [
 
 [[package]]
 name = "agentkube-core"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -85,7 +85,7 @@ dependencies = [
 
 [[package]]
 name = "agentkube-protocol"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "agentkube-core",
  "serde",
@@ -94,7 +94,7 @@ dependencies = [
 
 [[package]]
 name = "agentkube-providers"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "agentkube-agents",
  "agentkube-core",
@@ -103,7 +103,7 @@ dependencies = [
 
 [[package]]
 name = "agentkube-queue"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "agentkube-core",
  "agentkube-tasks",
@@ -112,7 +112,7 @@ dependencies = [
 
 [[package]]
 name = "agentkube-router"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "agentkube-agents",
  "agentkube-core",
@@ -123,7 +123,7 @@ dependencies = [
 
 [[package]]
 name = "agentkube-scheduler"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "agentkube-agents",
  "agentkube-core",
@@ -132,7 +132,7 @@ dependencies = [
 
 [[package]]
 name = "agentkube-storage"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "agentkube-agents",
  "agentkube-core",
@@ -141,7 +141,7 @@ dependencies = [
 
 [[package]]
 name = "agentkube-tasks"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "agentkube-agents",
  "agentkube-core",
@@ -152,7 +152,7 @@ dependencies = [
 
 [[package]]
 name = "agentkube-workers"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "agentkube-agents",
  "agentkube-core",
