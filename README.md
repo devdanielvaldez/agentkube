@@ -77,8 +77,9 @@ The repository currently contains the foundational Rust workspace:
 | `agentkube-tasks` | Task requirements, budgets, retries, results, and lifecycle state | Implemented |
 | `agentkube-storage` | Async repository ports, optimistic concurrency, and in-memory storage | Implemented |
 | `agentkube-queue` | Priority dispatch, delayed delivery, leases, and recovery | Implemented |
+| `agentkube-providers` | Model inference contracts, normalized errors, streaming, and capabilities | Implemented |
 
-The next milestones are providers and workers, followed by scheduling,
+The next milestones are model routing and workers, followed by scheduling,
 reconciliation, API, and CLI.
 
 The complete technical vision is documented in

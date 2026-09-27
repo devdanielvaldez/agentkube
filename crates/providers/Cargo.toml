@@ -1,0 +1,12 @@
+[package]
+name = "agentkube-providers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Model provider contracts and deterministic test adapters for AgentKube"
+
+[dependencies]
+agentkube-agents = { path = "../agents" }
+agentkube-core = { path = "../core" }
+serde_json.workspace = true
