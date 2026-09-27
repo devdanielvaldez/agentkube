@@ -88,6 +88,8 @@ The next milestone is the CLI.
 
 The complete technical vision is documented in
 [docs/architecture.md](docs/architecture.md).
+The implementation contract for the remaining CLI module is documented in
+[docs/cli-module.md](docs/cli-module.md).
 
 ## Development
 
