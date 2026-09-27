@@ -5,28 +5,28 @@
 class Agentkube < Formula
   desc "Orchestration layer for autonomous AI agents"
   homepage "https://github.com/devdanielvaldez/agentkube"
-  version "0.0.2"
+  version "0.0.3"
   license "Apache-2.0"
 
   on_macos do
     on_arm do
-      url "https://github.com/devdanielvaldez/agentkube/releases/download/v0.0.2/agentkube-v0.0.2-aarch64-apple-darwin.tar.gz"
-      sha256 "a8ce383aca6fa2cd949b155de7452de2f214f8aa6afe60df7e16884dad70af27"
+      url "https://github.com/devdanielvaldez/agentkube/releases/download/v0.0.3/agentkube-v0.0.3-aarch64-apple-darwin.tar.gz"
+      sha256 "384c31527480184af51160eaadfd20f94b0429a01f108406e77f2d166f576684"
     end
     on_intel do
-      url "https://github.com/devdanielvaldez/agentkube/releases/download/v0.0.2/agentkube-v0.0.2-x86_64-apple-darwin.tar.gz"
-      sha256 "d95ebb5f3b2c858e1e2a157113993ce99389824de0299b4314a91ca54288da18"
+      url "https://github.com/devdanielvaldez/agentkube/releases/download/v0.0.3/agentkube-v0.0.3-x86_64-apple-darwin.tar.gz"
+      sha256 "3f4ac4fc00b157e99ad923925152cf53946b18059716b8d547d5698f88b71334"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/devdanielvaldez/agentkube/releases/download/v0.0.2/agentkube-v0.0.2-aarch64-unknown-linux-gnu.tar.gz"
-      sha256 "4325b0759e5dbd8e0dae66e67d6b260f6d1c9965a80ffa623ffd6397f0638419"
+      url "https://github.com/devdanielvaldez/agentkube/releases/download/v0.0.3/agentkube-v0.0.3-aarch64-unknown-linux-gnu.tar.gz"
+      sha256 "9da5b6a2e06c81ed14f0359dfb6037ff3911c8f610c3aa992e286e68aa259189"
     end
     on_intel do
-      url "https://github.com/devdanielvaldez/agentkube/releases/download/v0.0.2/agentkube-v0.0.2-x86_64-unknown-linux-gnu.tar.gz"
-      sha256 "87782e9977d6766f3f84b5ccb537e93148826c503ce06bccb68fa227ef1fb385"
+      url "https://github.com/devdanielvaldez/agentkube/releases/download/v0.0.3/agentkube-v0.0.3-x86_64-unknown-linux-gnu.tar.gz"
+      sha256 "ab994f615762b9834fa9a9b07315c91e266814772954504e3cb67981b7fc4f95"
     end
   end
 
