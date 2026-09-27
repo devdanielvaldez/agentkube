@@ -1,0 +1,14 @@
+[package]
+name = "agentkube-storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Persistence ports and in-memory repositories for AgentKube"
+
+[dependencies]
+agentkube-agents = { path = "../agents" }
+agentkube-core = { path = "../core" }
+
+[dev-dependencies]
+agentkube-tasks = { path = "../tasks" }
