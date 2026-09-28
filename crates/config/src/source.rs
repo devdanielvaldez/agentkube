@@ -194,6 +194,20 @@ impl ConfigSource for EnvironmentSource {
                     providers_patch(&mut patch).openai_api_key =
                         Some(parse_secret(self, full_key, value)?)
                 }
+                "PROVIDERS__ANTHROPIC_BASE_URL" => {
+                    providers_patch(&mut patch).anthropic_base_url = Some(value.clone())
+                }
+                "PROVIDERS__ANTHROPIC_API_KEY" => {
+                    providers_patch(&mut patch).anthropic_api_key =
+                        Some(parse_secret(self, full_key, value)?)
+                }
+                "PROVIDERS__GEMINI_BASE_URL" => {
+                    providers_patch(&mut patch).gemini_base_url = Some(value.clone())
+                }
+                "PROVIDERS__GEMINI_API_KEY" => {
+                    providers_patch(&mut patch).gemini_api_key =
+                        Some(parse_secret(self, full_key, value)?)
+                }
                 "AUTH__TOKEN" => {
                     auth_patch(&mut patch).token = Some(parse_secret(self, full_key, value)?)
                 }

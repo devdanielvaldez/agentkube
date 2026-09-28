@@ -89,6 +89,16 @@ fn operator_storage_provider_and_auth_settings_load_from_environment() {
                 "http://ollama:11434",
             ),
             ("AGENTKUBE_PROVIDERS__OPENAI_API_KEY", "sk-test-key"),
+            (
+                "AGENTKUBE_PROVIDERS__ANTHROPIC_BASE_URL",
+                "https://api.anthropic.com",
+            ),
+            ("AGENTKUBE_PROVIDERS__ANTHROPIC_API_KEY", "sk-ant-test"),
+            (
+                "AGENTKUBE_PROVIDERS__GEMINI_BASE_URL",
+                "https://generativelanguage.googleapis.com",
+            ),
+            ("AGENTKUBE_PROVIDERS__GEMINI_API_KEY", "AIza-test"),
             ("AGENTKUBE_AUTH__TOKEN", "bearer-secret"),
         ],
     );
@@ -118,6 +128,31 @@ fn operator_storage_provider_and_auth_settings_load_from_environment() {
         config.auth().token().expect("token configured").expose(),
         "bearer-secret"
     );
+    assert_eq!(
+        config.providers().anthropic_base_url(),
+        "https://api.anthropic.com"
+    );
+    assert_eq!(
+        config
+            .providers()
+            .anthropic_api_key()
+            .expect("anthropic key configured")
+            .expose(),
+        "sk-ant-test"
+    );
+    assert_eq!(
+        config.providers().gemini_base_url(),
+        "https://generativelanguage.googleapis.com"
+    );
+    assert_eq!(
+        config
+            .providers()
+            .gemini_api_key()
+            .expect("gemini key configured")
+            .expose(),
+        "AIza-test"
+    );
+    assert!(!format!("{:?}", config.providers()).contains("sk-ant-test"));
 }
 
 #[test]

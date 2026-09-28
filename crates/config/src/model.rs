@@ -140,6 +140,23 @@ impl AgentKubeConfig {
         }
         validate_model_entries(&self.providers.ollama_models, "providers.ollamaModels")?;
         validate_model_entries(&self.providers.openai_models, "providers.openaiModels")?;
+        if !is_http_url(&self.providers.anthropic_base_url) {
+            return Err(ConfigValidationError::new(
+                "providers.anthropicBaseUrl",
+                "must use http or https",
+            ));
+        }
+        if !is_http_url(&self.providers.gemini_base_url) {
+            return Err(ConfigValidationError::new(
+                "providers.geminiBaseUrl",
+                "must use http or https",
+            ));
+        }
+        validate_model_entries(
+            &self.providers.anthropic_models,
+            "providers.anthropicModels",
+        )?;
+        validate_model_entries(&self.providers.gemini_models, "providers.geminiModels")?;
         Ok(())
     }
 
@@ -522,6 +539,16 @@ pub struct ProvidersConfig {
     ollama_models: Vec<ProviderModelEntry>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     openai_models: Vec<ProviderModelEntry>,
+    anthropic_base_url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    anthropic_api_key: Option<SecretString>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    anthropic_models: Vec<ProviderModelEntry>,
+    gemini_base_url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    gemini_api_key: Option<SecretString>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    gemini_models: Vec<ProviderModelEntry>,
 }
 
 impl ProvidersConfig {
@@ -561,6 +588,42 @@ impl ProvidersConfig {
         &self.openai_models
     }
 
+    /// Returns the Anthropic base URL.
+    #[must_use]
+    pub fn anthropic_base_url(&self) -> &str {
+        &self.anthropic_base_url
+    }
+
+    /// Returns the Anthropic API key when configured (never logged).
+    #[must_use]
+    pub fn anthropic_api_key(&self) -> Option<&SecretString> {
+        self.anthropic_api_key.as_ref()
+    }
+
+    /// Returns explicitly configured Anthropic catalog entries.
+    #[must_use]
+    pub fn anthropic_models(&self) -> &[ProviderModelEntry] {
+        &self.anthropic_models
+    }
+
+    /// Returns the Gemini base URL.
+    #[must_use]
+    pub fn gemini_base_url(&self) -> &str {
+        &self.gemini_base_url
+    }
+
+    /// Returns the Gemini API key when configured (never logged).
+    #[must_use]
+    pub fn gemini_api_key(&self) -> Option<&SecretString> {
+        self.gemini_api_key.as_ref()
+    }
+
+    /// Returns explicitly configured Gemini catalog entries.
+    #[must_use]
+    pub fn gemini_models(&self) -> &[ProviderModelEntry] {
+        &self.gemini_models
+    }
+
     fn apply(&mut self, patch: ProvidersConfigPatch) {
         if let Some(value) = patch.ollama_enabled {
             self.ollama_enabled = value;
@@ -580,6 +643,24 @@ impl ProvidersConfig {
         if let Some(value) = patch.openai_models {
             self.openai_models = value;
         }
+        if let Some(value) = patch.anthropic_base_url {
+            self.anthropic_base_url = value;
+        }
+        if let Some(value) = patch.anthropic_api_key {
+            self.anthropic_api_key = Some(value);
+        }
+        if let Some(value) = patch.anthropic_models {
+            self.anthropic_models = value;
+        }
+        if let Some(value) = patch.gemini_base_url {
+            self.gemini_base_url = value;
+        }
+        if let Some(value) = patch.gemini_api_key {
+            self.gemini_api_key = Some(value);
+        }
+        if let Some(value) = patch.gemini_models {
+            self.gemini_models = value;
+        }
     }
 }
 
@@ -592,6 +673,12 @@ impl Default for ProvidersConfig {
             openai_api_key: None,
             ollama_models: Vec::new(),
             openai_models: Vec::new(),
+            anthropic_base_url: "https://api.anthropic.com".to_owned(),
+            anthropic_api_key: None,
+            anthropic_models: Vec::new(),
+            gemini_base_url: "https://generativelanguage.googleapis.com".to_owned(),
+            gemini_api_key: None,
+            gemini_models: Vec::new(),
         }
     }
 }
@@ -979,6 +1066,12 @@ pub struct ProvidersConfigPatch {
     pub(crate) openai_api_key: Option<SecretString>,
     pub(crate) ollama_models: Option<Vec<ProviderModelEntry>>,
     pub(crate) openai_models: Option<Vec<ProviderModelEntry>>,
+    pub(crate) anthropic_base_url: Option<String>,
+    pub(crate) anthropic_api_key: Option<SecretString>,
+    pub(crate) anthropic_models: Option<Vec<ProviderModelEntry>>,
+    pub(crate) gemini_base_url: Option<String>,
+    pub(crate) gemini_api_key: Option<SecretString>,
+    pub(crate) gemini_models: Option<Vec<ProviderModelEntry>>,
 }
 
 impl ProvidersConfigPatch {
@@ -1021,6 +1114,48 @@ impl ProvidersConfigPatch {
     #[must_use]
     pub fn with_openai_models(mut self, models: Vec<ProviderModelEntry>) -> Self {
         self.openai_models = Some(models);
+        self
+    }
+
+    /// Overrides the Anthropic base URL.
+    #[must_use]
+    pub fn with_anthropic_base_url(mut self, url: impl Into<String>) -> Self {
+        self.anthropic_base_url = Some(url.into());
+        self
+    }
+
+    /// Sets the Anthropic API key.
+    #[must_use]
+    pub fn with_anthropic_api_key(mut self, key: SecretString) -> Self {
+        self.anthropic_api_key = Some(key);
+        self
+    }
+
+    /// Replaces the explicit Anthropic catalog entries.
+    #[must_use]
+    pub fn with_anthropic_models(mut self, models: Vec<ProviderModelEntry>) -> Self {
+        self.anthropic_models = Some(models);
+        self
+    }
+
+    /// Overrides the Gemini base URL.
+    #[must_use]
+    pub fn with_gemini_base_url(mut self, url: impl Into<String>) -> Self {
+        self.gemini_base_url = Some(url.into());
+        self
+    }
+
+    /// Sets the Gemini API key.
+    #[must_use]
+    pub fn with_gemini_api_key(mut self, key: SecretString) -> Self {
+        self.gemini_api_key = Some(key);
+        self
+    }
+
+    /// Replaces the explicit Gemini catalog entries.
+    #[must_use]
+    pub fn with_gemini_models(mut self, models: Vec<ProviderModelEntry>) -> Self {
+        self.gemini_models = Some(models);
         self
     }
 }
