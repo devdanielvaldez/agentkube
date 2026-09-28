@@ -16,6 +16,10 @@ use std::{error::Error, fmt, time::Duration};
 pub(crate) const OLLAMA_TIMEOUT: Duration = Duration::from_secs(300);
 /// Default request deadline for hosted OpenAI generations.
 pub(crate) const OPENAI_TIMEOUT: Duration = Duration::from_secs(120);
+/// Default request deadline for hosted Anthropic generations.
+pub(crate) const ANTHROPIC_TIMEOUT: Duration = Duration::from_secs(120);
+/// Default request deadline for hosted Gemini generations.
+pub(crate) const GEMINI_TIMEOUT: Duration = Duration::from_secs(120);
 /// Largest error body kept for diagnostics.
 pub(crate) const ERROR_PREVIEW_LIMIT: usize = 300;
 
