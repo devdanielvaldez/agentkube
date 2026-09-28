@@ -5,33 +5,33 @@
 class Agentkube < Formula
   desc "Orchestration layer for autonomous AI agents"
   homepage "https://github.com/devdanielvaldez/agentkube"
-  version "0.0.3"
+  version "0.2.0"
   license "Apache-2.0"
 
   on_macos do
     on_arm do
-      url "https://github.com/devdanielvaldez/agentkube/releases/download/v0.0.3/agentkube-v0.0.3-aarch64-apple-darwin.tar.gz"
-      sha256 "384c31527480184af51160eaadfd20f94b0429a01f108406e77f2d166f576684"
+      url "https://github.com/devdanielvaldez/agentkube/releases/download/v0.2.0/agentkube-v0.2.0-aarch64-apple-darwin.tar.gz"
+      sha256 "59c01fa0a1cbdabcfef342b75ba4ba5de37f1d0845f9305d551a1a14361645ff"
     end
     on_intel do
-      url "https://github.com/devdanielvaldez/agentkube/releases/download/v0.0.3/agentkube-v0.0.3-x86_64-apple-darwin.tar.gz"
-      sha256 "3f4ac4fc00b157e99ad923925152cf53946b18059716b8d547d5698f88b71334"
+      url "https://github.com/devdanielvaldez/agentkube/releases/download/v0.2.0/agentkube-v0.2.0-x86_64-apple-darwin.tar.gz"
+      sha256 "1ee0c60d088abcc8dde33d6a297737bcb5542d25e28373ebdfb65c7b96acb73c"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/devdanielvaldez/agentkube/releases/download/v0.0.3/agentkube-v0.0.3-aarch64-unknown-linux-gnu.tar.gz"
-      sha256 "9da5b6a2e06c81ed14f0359dfb6037ff3911c8f610c3aa992e286e68aa259189"
+      url "https://github.com/devdanielvaldez/agentkube/releases/download/v0.2.0/agentkube-v0.2.0-aarch64-unknown-linux-gnu.tar.gz"
+      sha256 "3b26c951a915edcbfd523722ba34499d79eccd4aa5b6db7fdf053535cf66cb5b"
     end
     on_intel do
-      url "https://github.com/devdanielvaldez/agentkube/releases/download/v0.0.3/agentkube-v0.0.3-x86_64-unknown-linux-gnu.tar.gz"
-      sha256 "ab994f615762b9834fa9a9b07315c91e266814772954504e3cb67981b7fc4f95"
+      url "https://github.com/devdanielvaldez/agentkube/releases/download/v0.2.0/agentkube-v0.2.0-x86_64-unknown-linux-gnu.tar.gz"
+      sha256 "a77c070057f74e8a06394fad495176a54a843e30cb49a4b0341dcfb4d6f9d84c"
     end
   end
 
   def install
-    bin.install "akctl", "agentkube-api", "agentkube-operator"
+    bin.install "akctl", "agentkube-api"
   end
 
   test do
