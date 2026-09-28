@@ -76,7 +76,7 @@ impl NodeRegistry {
     /// Lists known nodes in deterministic identifier order.
     pub async fn list(&self) -> Vec<NodeInfo> {
         let mut nodes: Vec<NodeInfo> = self.inner.read().await.values().cloned().collect();
-        nodes.sort_by(|left, right| left.node_id().to_string().cmp(&right.node_id().to_string()));
+        nodes.sort_by_key(|node| node.node_id().to_string());
         nodes
     }
 }

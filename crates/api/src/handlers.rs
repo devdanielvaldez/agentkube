@@ -43,7 +43,7 @@ pub(crate) async fn ready(State(state): State<ApiState>) -> ApiResult<Json<Healt
 }
 
 pub(crate) async fn metrics(State(state): State<ApiState>) -> ApiResult<MetricsResponse> {
-    Ok(crate::metrics::render(&state).await?)
+    crate::metrics::render(&state).await
 }
 
 pub(crate) async fn list_nodes(State(state): State<ApiState>) -> Json<Vec<NodeInfo>> {
