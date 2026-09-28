@@ -19,6 +19,10 @@ pub struct CatalogSet {
     pub ollama: Vec<(ModelName, ModelCapabilities)>,
     /// OpenAI models with capabilities.
     pub openai: Vec<(ModelName, ModelCapabilities)>,
+    /// Anthropic models with capabilities.
+    pub anthropic: Vec<(ModelName, ModelCapabilities)>,
+    /// Gemini models with capabilities.
+    pub gemini: Vec<(ModelName, ModelCapabilities)>,
 }
 
 /// Discovers Ollama model names via `/api/tags`.
@@ -128,9 +132,45 @@ pub fn build_catalogs(
         }
     }
 
+    let mut anthropic: Vec<(ModelName, ModelCapabilities)> = Vec::new();
+    if config.anthropic_api_key().is_some() {
+        for (name, context, max_output, input_price, output_price) in well_known_anthropic() {
+            anthropic.push((
+                model_name(name)?,
+                hosted_caps(context, max_output, input_price, output_price)?,
+            ));
+        }
+        for entry in config.anthropic_models() {
+            replace_model(&mut anthropic, entry)?;
+        }
+    }
+
+    let mut gemini: Vec<(ModelName, ModelCapabilities)> = Vec::new();
+    if config.gemini_api_key().is_some() {
+        for (name, context, max_output, input_price, output_price) in well_known_gemini() {
+            gemini.push((
+                model_name(name)?,
+                hosted_caps(context, max_output, input_price, output_price)?,
+            ));
+        }
+        for entry in config.gemini_models() {
+            replace_model(&mut gemini, entry)?;
+        }
+    }
+
     ollama.sort_by(|left, right| left.0.as_str().cmp(right.0.as_str()));
     openai.sort_by(|left, right| left.0.as_str().cmp(right.0.as_str()));
-    Ok((CatalogSet { ollama, openai }, warnings))
+    anthropic.sort_by(|left, right| left.0.as_str().cmp(right.0.as_str()));
+    gemini.sort_by(|left, right| left.0.as_str().cmp(right.0.as_str()));
+    Ok((
+        CatalogSet {
+            ollama,
+            openai,
+            anthropic,
+            gemini,
+        },
+        warnings,
+    ))
 }
 
 /// Strips an Ollama `:tag` suffix for catalog keying, keeping the full name
@@ -198,9 +238,19 @@ fn openai_caps(
     input_price: u64,
     output_price: u64,
 ) -> Result<ModelCapabilities, OperatorError> {
+    hosted_caps(context, max_output, input_price, output_price)
+}
+
+/// Hosted-model capabilities shared by OpenAI, Anthropic, and Gemini tables.
+fn hosted_caps(
+    context: u32,
+    max_output: u32,
+    input_price: u64,
+    output_price: u64,
+) -> Result<ModelCapabilities, OperatorError> {
     Ok(ModelCapabilities::new(
-        checked(context, "openai context window")?,
-        checked(max_output, "openai output ceiling")?,
+        checked(context, "hosted context window")?,
+        checked(max_output, "hosted output ceiling")?,
         true,
         true,
         input_price,
@@ -229,5 +279,24 @@ fn well_known_openai() -> Vec<(&'static str, u32, u32, u64, u64)> {
     vec![
         ("gpt-4o", 128_000, 16_384, 2_500_000, 10_000_000),
         ("gpt-4o-mini", 128_000, 16_384, 150_000, 600_000),
+    ]
+}
+
+/// Vendor-published Anthropic specs with list prices in micro-USD per million
+/// tokens (September 2026 snapshot; override via configuration entries).
+/// Context windows have held at 200K across Sonnet generations.
+fn well_known_anthropic() -> Vec<(&'static str, u32, u32, u64, u64)> {
+    vec![
+        ("claude-sonnet-4-5", 200_000, 64_000, 3_000_000, 15_000_000),
+        ("claude-haiku-4-5", 200_000, 64_000, 1_000_000, 5_000_000),
+    ]
+}
+
+/// Vendor-published Gemini specs with list prices in micro-USD per million
+/// tokens (September 2026 snapshot; override via configuration entries).
+fn well_known_gemini() -> Vec<(&'static str, u32, u32, u64, u64)> {
+    vec![
+        ("gemini-2.5-flash", 1_048_576, 65_536, 300_000, 2_500_000),
+        ("gemini-2.0-flash", 1_048_576, 8_192, 100_000, 400_000),
     ]
 }

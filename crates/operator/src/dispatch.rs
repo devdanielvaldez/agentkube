@@ -12,18 +12,22 @@ use crate::OperatorError;
 use agentkube_agents::ProviderName;
 use agentkube_api::{NodeInfo, NodeRegistry};
 use agentkube_core::{HumanDuration, NodeId, Resource};
-use agentkube_queue::TaskQueue;
+use agentkube_queue::{TaskLease, TaskQueue};
 use agentkube_scheduler::{
     CandidateMetrics, NodeLocality, NodeSnapshot, ProviderAvailability, ScheduleOutcome, Scheduler,
     SchedulingCandidate,
 };
 use agentkube_storage::ResourceRepository;
 use agentkube_tasks::{AgentTask, TaskFailure, TaskState};
-use agentkube_workers::{AgentRuntime, RepositoryWorkerStateStore, WorkerStateStore};
+use agentkube_workers::{
+    AgentRuntime, ExecutionClaim, RepositoryWorkerStateStore, WorkerStateStore,
+};
+use std::collections::HashMap;
 use std::sync::{
     Arc,
     atomic::{AtomicU16, Ordering},
 };
+use std::time::Duration;
 
 /// Provider endpoint advertised by the local node.
 #[derive(Debug, Clone)]
@@ -64,6 +68,7 @@ pub struct DispatchSummary {
 }
 
 /// Scheduled dispatch over repository, queue, and runtime ports.
+#[derive(Clone)]
 pub struct Dispatcher {
     tasks: Arc<dyn ResourceRepository<AgentTask>>,
     agents: Arc<dyn ResourceRepository<agentkube_agents::AgentDefinition>>,
@@ -133,6 +138,14 @@ impl Dispatcher {
             .sync_definitions(definitions.clone())
             .map_err(|error| OperatorError::Worker(error.to_string()))?;
         for definition in &definitions {
+            if self
+                .state
+                .desired_instance_count(definition.metadata().uid())
+                .map_err(|error| OperatorError::Worker(error.to_string()))?
+                == Some(0)
+            {
+                continue;
+            }
             // Capacity is explicit: one ready instance per definition on this
             // node. Failures here skip the definition loudly; they never abort
             // dispatch for every other definition.
@@ -143,49 +156,65 @@ impl Dispatcher {
                 );
             }
         }
-        let mut tasks: Vec<AgentTask> = self
+        let tasks: HashMap<_, AgentTask> = self
             .tasks
             .list(None)
             .await?
             .into_iter()
             .filter(|task| task.status().state() == TaskState::Queued)
+            .map(|task| (task.status().task_id(), task))
             .collect();
-        tasks.sort_by(|left, right| {
-            right
-                .spec()
-                .priority()
-                .weight()
-                .cmp(&left.spec().priority().weight())
-                .then_with(|| {
-                    left.metadata()
-                        .name()
-                        .as_str()
-                        .cmp(right.metadata().name().as_str())
-                })
-        });
 
         let mut summary = DispatchSummary::default();
-        for task in &tasks {
+        let mut executions = tokio::task::JoinSet::new();
+        while self.active.load(Ordering::SeqCst) < self.concurrency {
+            let Some(lease) = self.queue.lease(self.node_id, self.lease_duration).await? else {
+                break;
+            };
+            let Some(task) = tasks.get(&lease.task_id()) else {
+                self.queue
+                    .acknowledge(lease.lease_id(), self.node_id)
+                    .await?;
+                continue;
+            };
             let candidates = self.candidates(&definitions).await?;
             match self.scheduler.schedule(task, &candidates) {
                 Err(error) => {
+                    self.queue
+                        .release(lease.lease_id(), self.node_id, None)
+                        .await?;
                     return Err(OperatorError::Scheduling(format!(
                         "cannot schedule task {:?}: {error}",
                         task.metadata().name().as_str()
                     )));
                 }
                 Ok(ScheduleOutcome::Unschedulable(report)) => {
+                    self.queue
+                        .release(lease.lease_id(), self.node_id, None)
+                        .await?;
                     summary.unscheduled += 1;
                     eprintln!(
                         "dispatch: task {:?} unschedulable ({} candidates rejected)",
                         task.metadata().name().as_str(),
                         report.evaluations().len()
                     );
+                    break;
                 }
                 Ok(ScheduleOutcome::Selected { decision, .. }) => {
-                    self.execute_decided(&decision, &mut summary).await?;
+                    if let Some(prepared) = self.prepare_execution(lease, &decision).await? {
+                        let dispatcher = self.clone();
+                        executions
+                            .spawn(async move { dispatcher.execute_prepared(prepared).await });
+                    }
                 }
             }
+        }
+        while let Some(result) = executions.join_next().await {
+            let completed = result.map_err(|error| {
+                OperatorError::Worker(format!("execution task failed: {error}"))
+            })??;
+            summary.executed += completed.executed;
+            summary.races += completed.races;
         }
         self.record_heartbeat().await;
         if summary.executed > 0 || summary.unscheduled > 0 || summary.races > 0 {
@@ -228,10 +257,10 @@ impl Dispatcher {
         let mut candidates = Vec::new();
         for definition in definitions {
             let owner = definition.metadata().uid();
-            let Some(instance) = instances
-                .iter()
-                .find(|instance| instance.definition_uid() == owner)
-            else {
+            let Some(instance) = instances.iter().find(|instance| {
+                instance.definition_uid() == owner
+                    && instance.state() == agentkube_agents::AgentInstanceState::Ready
+            }) else {
                 continue;
             };
             let metrics =
@@ -262,23 +291,11 @@ impl Dispatcher {
         "1s".parse().expect("static latency is valid")
     }
 
-    async fn execute_decided(
+    async fn prepare_execution(
         &self,
+        lease: TaskLease,
         decision: &agentkube_scheduler::PlacementDecision,
-        summary: &mut DispatchSummary,
-    ) -> Result<(), OperatorError> {
-        let Some(lease) = self.queue.lease(self.node_id, self.lease_duration).await? else {
-            return Ok(());
-        };
-        if lease.task_id() != decision.task_id() {
-            // Another task won the queue race after scheduling: release this
-            // delivery untouched instead of executing a mismatched placement.
-            self.queue
-                .release(lease.lease_id(), self.node_id, None)
-                .await?;
-            summary.races += 1;
-            return Ok(());
-        }
+    ) -> Result<Option<PreparedExecution>, OperatorError> {
         let task_id = decision.task_id();
         let agent_id = decision.agent_id();
         let claim = match self.state.claim(task_id, agent_id, self.node_id).await {
@@ -288,7 +305,7 @@ impl Dispatcher {
                     .acknowledge(lease.lease_id(), self.node_id)
                     .await?;
                 eprintln!("dispatch: discarded stale delivery for task {task_id}: {error}");
-                return Ok(());
+                return Ok(None);
             }
             Err(error) => {
                 self.queue
@@ -297,10 +314,67 @@ impl Dispatcher {
                 return Err(OperatorError::Worker(error.to_string()));
             }
         };
+        let execution_timeout = [
+            claim.task().spec().budget().timeout(),
+            claim.definition().spec().resources().timeout(),
+        ]
+        .into_iter()
+        .flatten()
+        .min();
         self.active.fetch_add(1, Ordering::SeqCst);
         self.record_heartbeat().await;
-        let outcome = self.runtime.execute(claim).await;
-        self.active.fetch_sub(1, Ordering::SeqCst);
+        Ok(Some(PreparedExecution {
+            lease,
+            claim,
+            task_id,
+            agent_id,
+            execution_timeout,
+        }))
+    }
+
+    async fn execute_prepared(
+        &self,
+        prepared: PreparedExecution,
+    ) -> Result<DispatchSummary, OperatorError> {
+        let _active_guard = ActiveExecution(Arc::clone(&self.active));
+        let PreparedExecution {
+            lease,
+            claim,
+            task_id,
+            agent_id,
+            execution_timeout,
+        } = prepared;
+        let execution = self.runtime.execute(claim);
+        tokio::pin!(execution);
+        let timeout_duration = execution_timeout
+            .map(HumanDuration::get)
+            .unwrap_or(Duration::MAX);
+        let timeout = tokio::time::sleep(timeout_duration);
+        tokio::pin!(timeout);
+        let renewal_period = (self.lease_duration.get() / 2).max(Duration::from_millis(1));
+        let mut renewal = tokio::time::interval(renewal_period);
+        renewal.tick().await;
+        let outcome = loop {
+            tokio::select! {
+                result = &mut execution => {
+                    break result.map_err(|error| {
+                        TaskFailure::new(error.task_failure_kind(), error.to_string())
+                    });
+                }
+                () = &mut timeout, if execution_timeout.is_some() => {
+                    let limit = execution_timeout.expect("timeout branch is guarded");
+                    break Err(TaskFailure::new(
+                        agentkube_tasks::TaskFailureKind::Timeout,
+                        format!("execution exceeded its {limit} deadline"),
+                    ));
+                }
+                _ = renewal.tick() => {
+                    self.queue
+                        .extend(lease.lease_id(), self.node_id, self.lease_duration)
+                        .await?;
+                }
+            }
+        };
         match outcome {
             Ok(output) => {
                 self.state
@@ -310,34 +384,32 @@ impl Dispatcher {
                 self.queue
                     .acknowledge(lease.lease_id(), self.node_id)
                     .await?;
-                summary.executed += 1;
             }
-            Err(error) => {
-                let failure = TaskFailure::new(error.task_failure_kind(), error.to_string());
-                match self.state.fail(task_id, agent_id, failure.clone()).await {
-                    Ok(agentkube_workers::FailureDisposition::Requeued { delay }) => {
-                        self.queue
-                            .release(lease.lease_id(), self.node_id, delay)
-                            .await?;
-                        summary.executed += 1;
-                    }
-                    Ok(agentkube_workers::FailureDisposition::Terminal) => {
-                        self.queue
-                            .acknowledge(lease.lease_id(), self.node_id)
-                            .await?;
-                        summary.executed += 1;
-                    }
-                    Err(state_error) => {
-                        self.queue
-                            .release(lease.lease_id(), self.node_id, None)
-                            .await?;
-                        return Err(OperatorError::Worker(state_error.to_string()));
-                    }
+            Err(failure) => match self.state.fail(task_id, agent_id, failure.clone()).await {
+                Ok(agentkube_workers::FailureDisposition::Requeued { delay }) => {
+                    self.queue
+                        .release(lease.lease_id(), self.node_id, delay)
+                        .await?;
                 }
-            }
+                Ok(agentkube_workers::FailureDisposition::Terminal) => {
+                    self.queue
+                        .acknowledge(lease.lease_id(), self.node_id)
+                        .await?;
+                }
+                Err(state_error) => {
+                    self.queue
+                        .release(lease.lease_id(), self.node_id, None)
+                        .await?;
+                    return Err(OperatorError::Worker(state_error.to_string()));
+                }
+            },
         }
         self.record_heartbeat().await;
-        Ok(())
+        Ok(DispatchSummary {
+            executed: 1,
+            unscheduled: 0,
+            races: 0,
+        })
     }
 
     async fn record_heartbeat(&self) {
@@ -352,6 +424,22 @@ impl Dispatcher {
 
     fn concurrency_nonzero(&self) -> std::num::NonZeroU16 {
         std::num::NonZeroU16::new(self.concurrency.max(1)).expect("concurrency is non-zero")
+    }
+}
+
+struct PreparedExecution {
+    lease: TaskLease,
+    claim: ExecutionClaim,
+    task_id: agentkube_core::TaskId,
+    agent_id: agentkube_core::AgentId,
+    execution_timeout: Option<HumanDuration>,
+}
+
+struct ActiveExecution(Arc<AtomicU16>);
+
+impl Drop for ActiveExecution {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
     }
 }
 

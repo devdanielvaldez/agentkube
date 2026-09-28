@@ -27,6 +27,7 @@ struct StoreInner {
     index: HashMap<TaskId, ResourceKey>,
     agents: HashMap<AgentId, AgentInstance>,
     definitions: HashMap<ResourceUid, AgentDefinition>,
+    desired_instances: HashMap<ResourceUid, usize>,
 }
 
 impl StoreInner {
@@ -136,6 +137,127 @@ impl RepositoryWorkerStateStore {
         Ok(self.lock()?.agents.values().cloned().collect())
     }
 
+    /// Removes an instance, returning whether one was present.
+    pub fn remove_instance(&self, agent_id: AgentId) -> Result<bool, WorkerStateError> {
+        Ok(self.lock()?.agents.remove(&agent_id).is_some())
+    }
+
+    /// Restarts a failed instance back to ready through its validated lifecycle.
+    pub fn restart_instance(
+        &self,
+        agent_id: AgentId,
+        node_id: NodeId,
+    ) -> Result<(), WorkerStateError> {
+        let mut inner = self.lock()?;
+        let agent = inner
+            .agents
+            .get_mut(&agent_id)
+            .ok_or(WorkerStateError::AgentNotFound(agent_id))?;
+        if agent.node_id() != Some(node_id) {
+            return Err(WorkerStateError::WrongNode {
+                agent_id,
+                expected: agent.node_id(),
+                actual: node_id,
+            });
+        }
+        if agent.state() != AgentInstanceState::Failed {
+            agent.fail().map_err(WorkerStateError::Agent)?;
+        }
+        agent.retry().map_err(WorkerStateError::Agent)?;
+        agent
+            .transition(AgentInstanceState::Starting)
+            .map_err(WorkerStateError::Agent)?;
+        agent
+            .transition(AgentInstanceState::Ready)
+            .map_err(WorkerStateError::Agent)?;
+        Ok(())
+    }
+
+    /// Returns a controller-owned replica target, when one was established.
+    pub fn desired_instance_count(
+        &self,
+        definition_uid: ResourceUid,
+    ) -> Result<Option<usize>, WorkerStateError> {
+        Ok(self.lock()?.desired_instances.get(&definition_uid).copied())
+    }
+
+    /// Converges the process-local instances for one definition to `desired`.
+    ///
+    /// Running instances are never killed during scale-down. Idle excess
+    /// replicas are removed first and failed/terminal replicas are replaced.
+    pub fn reconcile_instances(
+        &self,
+        definition: &AgentDefinition,
+        node_id: NodeId,
+        desired: usize,
+    ) -> Result<Vec<AgentInstance>, WorkerStateError> {
+        let mut inner = self.lock()?;
+        let owner = definition.metadata().uid();
+        inner.definitions.insert(owner, definition.clone());
+        inner.desired_instances.insert(owner, desired);
+        inner.agents.retain(|_, agent| {
+            agent.definition_uid() != owner
+                || matches!(
+                    agent.state(),
+                    AgentInstanceState::Ready
+                        | AgentInstanceState::Running
+                        | AgentInstanceState::Paused
+                        | AgentInstanceState::Pending
+                        | AgentInstanceState::Scheduling
+                        | AgentInstanceState::Starting
+                        | AgentInstanceState::Retrying
+                )
+        });
+
+        let mut idle: Vec<AgentId> = inner
+            .agents
+            .values()
+            .filter(|agent| {
+                agent.definition_uid() == owner
+                    && agent.current_task().is_none()
+                    && agent.state() != AgentInstanceState::Running
+            })
+            .map(AgentInstance::id)
+            .collect();
+        idle.sort_by(|left, right| right.as_uuid().cmp(left.as_uuid()));
+        let current = inner
+            .agents
+            .values()
+            .filter(|agent| agent.definition_uid() == owner)
+            .count();
+        for id in idle.into_iter().take(current.saturating_sub(desired)) {
+            inner.agents.remove(&id);
+        }
+
+        let current = inner
+            .agents
+            .values()
+            .filter(|agent| agent.definition_uid() == owner)
+            .count();
+        for _ in current..desired {
+            let mut agent = AgentInstance::new(owner);
+            agent
+                .transition(AgentInstanceState::Scheduling)
+                .map_err(WorkerStateError::Agent)?;
+            agent
+                .assign_node(node_id)
+                .map_err(WorkerStateError::Agent)?;
+            agent
+                .transition(AgentInstanceState::Starting)
+                .map_err(WorkerStateError::Agent)?;
+            agent
+                .transition(AgentInstanceState::Ready)
+                .map_err(WorkerStateError::Agent)?;
+            inner.agents.insert(agent.id(), agent);
+        }
+        Ok(inner
+            .agents
+            .values()
+            .filter(|agent| agent.definition_uid() == owner)
+            .cloned()
+            .collect())
+    }
+
     /// Returns a ready, idle instance for a definition, creating one when needed.
     ///
     /// Instances that can never run again (completed, terminated, failed) are
@@ -146,43 +268,25 @@ impl RepositoryWorkerStateStore {
         definition: &AgentDefinition,
         node_id: NodeId,
     ) -> Result<AgentId, WorkerStateError> {
-        let mut inner = self.lock()?;
         let owner = definition.metadata().uid();
-        inner.definitions.insert(owner, definition.clone());
-        if let Some((id, _)) = inner
-            .agents
-            .iter()
-            .find(|(_, agent)| {
-                agent.definition_uid() == owner
-                    && agent.node_id() == Some(node_id)
+        let desired = self
+            .lock()?
+            .desired_instances
+            .get(&owner)
+            .copied()
+            .unwrap_or(1)
+            .max(1);
+        self.reconcile_instances(definition, node_id, desired)?
+            .into_iter()
+            .find(|agent| {
+                agent.node_id() == Some(node_id)
                     && agent.state() == AgentInstanceState::Ready
                     && agent.current_task().is_none()
             })
-            .map(|(id, agent)| (*id, agent.clone()))
-        {
-            return Ok(id);
-        }
-        inner.agents.retain(|_, agent| {
-            agent.definition_uid() != owner
-                || agent.state() == AgentInstanceState::Running
-                || agent.current_task().is_some()
-        });
-        let mut agent = AgentInstance::new(owner);
-        agent
-            .transition(AgentInstanceState::Scheduling)
-            .map_err(WorkerStateError::Agent)?;
-        agent
-            .assign_node(node_id)
-            .map_err(WorkerStateError::Agent)?;
-        agent
-            .transition(AgentInstanceState::Starting)
-            .map_err(WorkerStateError::Agent)?;
-        agent
-            .transition(AgentInstanceState::Ready)
-            .map_err(WorkerStateError::Agent)?;
-        let id = agent.id();
-        inner.agents.insert(id, agent);
-        Ok(id)
+            .map(|agent| agent.id())
+            .ok_or(WorkerStateError::Unavailable(
+                "definition has no idle instance",
+            ))
     }
 
     fn lock(&self) -> Result<MutexGuard<'_, StoreInner>, WorkerStateError> {

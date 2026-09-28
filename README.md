@@ -79,7 +79,7 @@ The repository currently contains the foundational Rust workspace:
 | `agentkube-sqlite` | Durable SQLite repositories with WAL and crash-safe boot recovery | Implemented |
 | `agentkube-queue` | Priority dispatch, delayed delivery, leases, and recovery | Implemented |
 | `agentkube-providers` | Model inference contracts, normalized errors, streaming, and capabilities | Implemented |
-| `agentkube-providers-http` | Ollama and OpenAI adapters with real usage accounting | Implemented |
+| `agentkube-providers-http` | Ollama, OpenAI, Anthropic, and Gemini adapters with real usage accounting | Implemented |
 | `agentkube-router` | Health, privacy, capability, cost-aware routing, and failover | Implemented |
 | `agentkube-workers` | Atomic execution, runtime integration, heartbeats, and settlement | Implemented |
 | `agentkube-scheduler` | Constraint filtering, explainable scoring, and deterministic placement | Implemented |
@@ -124,7 +124,8 @@ End-to-end CLI smoke test against a throwaway server: `./scripts/smoke-cli.sh`.
 
 ## Install
 
-Prebuilt `akctl` + `agentkube-api` installers for macOS, Linux, and Windows:
+Prebuilt `akctl`, `agentkube-api`, and durable `agentkube-operator` installers
+for macOS, Linux, and Windows:
 
 ```bash
 # Homebrew (macOS/Linux) — fully qualified: bare `agentkube` resolves to an unrelated cask
@@ -168,6 +169,10 @@ Useful flags: `--server http://127.0.0.1:8080` (or `AGENTKUBE_SERVER`),
 `apply --dry-run=client` for client-side validation without requests.
 `describe` defaults to YAML while `get` honors the requested output mode.
 See `akctl --help` for the full contract.
+
+For real task execution and durable state, run
+`cargo run -p agentkube-operator --bin agentkube-operator` instead of the
+in-memory API development server.
 
 ## Contributing
 

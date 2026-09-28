@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # AgentKube installer for macOS and Linux.
 #
-# Installs `akctl` and `agentkube-api` from GitHub Releases.
+# Installs `akctl`, `agentkube-api`, and `agentkube-operator` from GitHub Releases.
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/devdanielvaldez/agentkube/main/install.sh | bash
@@ -17,14 +17,14 @@
 set -euo pipefail
 
 REPO="devdanielvaldez/agentkube"
-BINARIES="akctl agentkube-api"
+BINARIES="akctl agentkube-api agentkube-operator"
 VERSION="${AGENTKUBE_VERSION:-latest}"
 INSTALL_DIR="${AGENTKUBE_INSTALL_DIR:-}"
 ONLY="all"
 
 usage() {
   cat <<'EOF'
-Usage: install.sh [VERSION] [--to DIR] [--only akctl|agentkube-api] [--help]
+Usage: install.sh [VERSION] [--to DIR] [--only akctl|agentkube-api|agentkube-operator] [--help]
 
   VERSION   e.g. v0.1.0, 0.1.0, or "latest" (default: latest)
   --to DIR  install directory (default: /usr/local/bin if writable, else ~/.local/bin)
@@ -38,7 +38,7 @@ while [ $# -gt 0 ]; do
     -h|--help) usage; exit 0 ;;
     --to) INSTALL_DIR="${2:?--to requires a directory}"; shift 2 ;;
     --to=*) INSTALL_DIR="${1#--to=}"; shift ;;
-    --only) ONLY="${2:?--only requires akctl or agentkube-api}"; shift 2 ;;
+    --only) ONLY="${2:?--only requires akctl, agentkube-api, or agentkube-operator}"; shift 2 ;;
     --only=*) ONLY="${1#--only=}"; shift ;;
     -*) echo "install.sh: unknown option: $1" >&2; usage >&2; exit 2 ;;
     *) VERSION="$1"; shift ;;
@@ -46,8 +46,8 @@ while [ $# -gt 0 ]; do
 done
 
 case "$ONLY" in
-  all|akctl|agentkube-api) ;;
-  *) echo "install.sh: --only must be akctl or agentkube-api, got: $ONLY" >&2; exit 2 ;;
+  all|akctl|agentkube-api|agentkube-operator) ;;
+  *) echo "install.sh: --only must be akctl, agentkube-api, or agentkube-operator, got: $ONLY" >&2; exit 2 ;;
 esac
 
 if [ "$ONLY" = "all" ]; then

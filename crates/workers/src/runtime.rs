@@ -1,4 +1,4 @@
-use crate::ExecutionClaim;
+use crate::{ExecutionClaim, ToolRegistry, ToolRegistryError};
 use agentkube_agents::{ModelName, ModelPolicy};
 use agentkube_providers::{
     ChatMessage, FinishReason, GenerationRequest, MessageText, ProviderErrorKind,
@@ -7,7 +7,14 @@ use agentkube_router::{
     ModelRouting, RouteDecision, RouterError, RoutingConstraints, RoutingRequest,
 };
 use agentkube_tasks::{TaskFailureKind, TaskResult, TaskUsage};
-use std::{error::Error, fmt, future::Future, num::NonZeroU32, pin::Pin, sync::Arc};
+use std::{
+    error::Error,
+    fmt,
+    future::Future,
+    num::{NonZeroU16, NonZeroU32},
+    pin::Pin,
+    sync::Arc,
+};
 
 /// Sendable future returned by agent runtime operations.
 pub type RuntimeFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, RuntimeError>> + Send + 'a>>;
@@ -104,7 +111,14 @@ impl AgentRuntime for SingleTurnRuntime {
             ];
             let mut generation = GenerationRequest::new(seed_model, messages)
                 .map_err(|_| RuntimeError::InvalidPrompt)?;
-            if let Some(max_tokens) = claim.task().spec().budget().max_tokens() {
+            let max_tokens = [
+                claim.task().spec().budget().max_tokens(),
+                claim.definition().spec().resources().max_tokens(),
+            ]
+            .into_iter()
+            .flatten()
+            .min();
+            if let Some(max_tokens) = max_tokens {
                 let value = u32::try_from(max_tokens.get())
                     .ok()
                     .and_then(NonZeroU32::new)
@@ -113,7 +127,14 @@ impl AgentRuntime for SingleTurnRuntime {
             }
             let mut constraints = RoutingConstraints::new()
                 .with_privacy(claim.task().spec().requirements().privacy());
-            if let Some(maximum) = claim.task().spec().budget().max_cost_micro_usd() {
+            let maximum_cost = [
+                claim.task().spec().budget().max_cost_micro_usd(),
+                claim.definition().spec().resources().max_cost_micro_usd(),
+            ]
+            .into_iter()
+            .flatten()
+            .min();
+            if let Some(maximum) = maximum_cost {
                 constraints = constraints.with_maximum_cost(maximum.get());
             }
             let routed = self
@@ -146,6 +167,189 @@ impl AgentRuntime for SingleTurnRuntime {
     }
 }
 
+/// Bounded multi-turn runtime with explicit, allowlisted tool execution.
+///
+/// Every tool must be both declared by the agent and registered in the local
+/// [`ToolRegistry`]. Token and cost usage accumulate across all turns.
+pub struct AgenticRuntime {
+    router: Arc<dyn ModelRouting>,
+    tools: ToolRegistry,
+    max_turns: NonZeroU16,
+}
+
+impl AgenticRuntime {
+    /// Creates a bounded agent loop.
+    #[must_use]
+    pub const fn new(
+        router: Arc<dyn ModelRouting>,
+        tools: ToolRegistry,
+        max_turns: NonZeroU16,
+    ) -> Self {
+        Self {
+            router,
+            tools,
+            max_turns,
+        }
+    }
+}
+
+impl AgentRuntime for AgenticRuntime {
+    fn health<'a>(&'a self) -> RuntimeFuture<'a, RuntimeHealth> {
+        Box::pin(async { Ok(RuntimeHealth::Healthy) })
+    }
+
+    fn execute<'a>(&'a self, claim: ExecutionClaim) -> RuntimeFuture<'a, RuntimeOutput> {
+        Box::pin(async move {
+            let policy = claim.definition().spec().model().clone();
+            let seed_model = match &policy {
+                ModelPolicy::Fixed { model, .. } => model.clone(),
+                ModelPolicy::Auto { .. } => {
+                    ModelName::new("auto").expect("static model name is valid")
+                }
+            };
+            let definitions = self
+                .tools
+                .definitions(claim.definition().spec().tools())
+                .map_err(RuntimeError::Tools)?;
+            let allowed_tools = claim.definition().spec().tools();
+            let mut messages = vec![
+                ChatMessage::system(
+                    MessageText::new(claim.definition().spec().instructions().as_str())
+                        .map_err(|_| RuntimeError::InvalidPrompt)?,
+                ),
+                ChatMessage::user(
+                    MessageText::new(claim.task().spec().objective().as_str())
+                        .map_err(|_| RuntimeError::InvalidPrompt)?,
+                ),
+            ];
+            let token_limit = [
+                claim.task().spec().budget().max_tokens(),
+                claim.definition().spec().resources().max_tokens(),
+            ]
+            .into_iter()
+            .flatten()
+            .min()
+            .map(|value| value.get());
+            let cost_limit = [
+                claim.task().spec().budget().max_cost_micro_usd(),
+                claim.definition().spec().resources().max_cost_micro_usd(),
+            ]
+            .into_iter()
+            .flatten()
+            .min()
+            .map(|value| value.get());
+            let mut input_tokens = 0u64;
+            let mut output_tokens = 0u64;
+            let mut total_cost = 0u64;
+
+            for _ in 0..self.max_turns.get() {
+                let mut generation = GenerationRequest::new(seed_model.clone(), messages.clone())
+                    .map_err(|_| RuntimeError::InvalidPrompt)?
+                    .with_tools(definitions.clone())
+                    .map_err(|_| RuntimeError::InvalidPrompt)?;
+                if let Some(limit) = token_limit {
+                    let consumed = input_tokens
+                        .checked_add(output_tokens)
+                        .ok_or(RuntimeError::CostOverflow)?;
+                    let remaining = limit
+                        .checked_sub(consumed)
+                        .and_then(|value| u32::try_from(value).ok())
+                        .and_then(NonZeroU32::new)
+                        .ok_or(RuntimeError::TokenBudgetExceeded)?;
+                    generation = generation.with_max_output_tokens(remaining);
+                }
+                let mut constraints = RoutingConstraints::new()
+                    .with_privacy(claim.task().spec().requirements().privacy());
+                if let Some(limit) = cost_limit {
+                    let remaining = limit
+                        .checked_sub(total_cost)
+                        .ok_or(RuntimeError::CostBudgetExceeded)?;
+                    constraints = constraints.with_maximum_cost(remaining);
+                }
+                let routed = self
+                    .router
+                    .generate(
+                        RoutingRequest::new(policy.clone(), generation)
+                            .with_constraints(constraints),
+                    )
+                    .await
+                    .map_err(RuntimeError::Routing)?;
+                let usage = routed.response().usage();
+                input_tokens = input_tokens
+                    .checked_add(usage.input_tokens())
+                    .ok_or(RuntimeError::CostOverflow)?;
+                output_tokens = output_tokens
+                    .checked_add(usage.output_tokens())
+                    .ok_or(RuntimeError::CostOverflow)?;
+                total_cost = total_cost
+                    .checked_add(
+                        routed
+                            .decision()
+                            .list_cost_for_usage(usage)
+                            .ok_or(RuntimeError::CostOverflow)?,
+                    )
+                    .ok_or(RuntimeError::CostOverflow)?;
+                if token_limit.is_some_and(|limit| {
+                    input_tokens
+                        .checked_add(output_tokens)
+                        .is_none_or(|total| total > limit)
+                }) {
+                    return Err(RuntimeError::TokenBudgetExceeded);
+                }
+                if cost_limit.is_some_and(|limit| total_cost > limit) {
+                    return Err(RuntimeError::CostBudgetExceeded);
+                }
+                if routed.response().finish_reason() == FinishReason::ContentFilter {
+                    return Err(RuntimeError::ContentFiltered);
+                }
+                let calls = routed.response().generated_tool_calls().to_vec();
+                if calls.is_empty() {
+                    let output = routed
+                        .response()
+                        .generated_text()
+                        .ok_or(RuntimeError::MissingOutput)?
+                        .to_owned();
+                    return Ok(RuntimeOutput::new(
+                        TaskResult::new(
+                            output,
+                            TaskUsage::new(input_tokens, output_tokens, total_cost),
+                        ),
+                        routed.decision().clone(),
+                    ));
+                }
+                if calls
+                    .iter()
+                    .any(|call| !allowed_tools.contains(call.name()))
+                {
+                    return Err(RuntimeError::UnauthorizedToolCall);
+                }
+                let assistant_text = routed
+                    .response()
+                    .generated_text()
+                    .map(MessageText::new)
+                    .transpose()
+                    .map_err(|_| RuntimeError::InvalidPrompt)?;
+                messages.push(
+                    ChatMessage::assistant_tool_calls(assistant_text, calls.clone())
+                        .map_err(|_| RuntimeError::InvalidPrompt)?,
+                );
+                for call in calls {
+                    let output = self
+                        .tools
+                        .execute(call.name(), call.arguments())
+                        .await
+                        .map_err(RuntimeError::Tools)?;
+                    messages.push(ChatMessage::tool(
+                        call.id().clone(),
+                        MessageText::new(output).map_err(|_| RuntimeError::InvalidPrompt)?,
+                    ));
+                }
+            }
+            Err(RuntimeError::TurnLimitExceeded(self.max_turns.get()))
+        })
+    }
+}
+
 /// Failure returned by an agent runtime.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuntimeError {
@@ -165,6 +369,16 @@ pub enum RuntimeError {
     MissingOutput,
     /// Estimated cost could not be represented.
     CostOverflow,
+    /// Accumulated input and output tokens crossed the declared budget.
+    TokenBudgetExceeded,
+    /// Accumulated provider cost crossed the declared budget.
+    CostBudgetExceeded,
+    /// A model requested a tool not granted to the agent.
+    UnauthorizedToolCall,
+    /// Tool lookup or execution failed.
+    Tools(ToolRegistryError),
+    /// The agent did not finish within its bounded turn count.
+    TurnLimitExceeded(u16),
     /// Runtime health does not allow new work.
     Unavailable,
 }
@@ -188,8 +402,13 @@ impl RuntimeError {
             | Self::InvalidPrompt
             | Self::OutputLimitTooLarge(_)
             | Self::UnexpectedToolCalls
-            | Self::MissingOutput => TaskFailureKind::Validation,
-            Self::CostOverflow => TaskFailureKind::BudgetExceeded,
+            | Self::MissingOutput
+            | Self::UnauthorizedToolCall
+            | Self::Tools(_) => TaskFailureKind::Validation,
+            Self::CostOverflow
+            | Self::TokenBudgetExceeded
+            | Self::CostBudgetExceeded
+            | Self::TurnLimitExceeded(_) => TaskFailureKind::BudgetExceeded,
         }
     }
 }
@@ -227,6 +446,13 @@ impl fmt::Display for RuntimeError {
             }
             Self::MissingOutput => formatter.write_str("provider returned no generated text"),
             Self::CostOverflow => formatter.write_str("runtime cost exceeded supported range"),
+            Self::TokenBudgetExceeded => formatter.write_str("token budget exceeded"),
+            Self::CostBudgetExceeded => formatter.write_str("cost budget exceeded"),
+            Self::UnauthorizedToolCall => {
+                formatter.write_str("model requested an unauthorized tool")
+            }
+            Self::Tools(error) => write!(formatter, "tool execution failed: {error}"),
+            Self::TurnLimitExceeded(limit) => write!(formatter, "agent exceeded {limit} turns"),
             Self::Unavailable => formatter.write_str("agent runtime is unavailable"),
         }
     }
@@ -236,6 +462,7 @@ impl Error for RuntimeError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::Routing(error) => Some(error),
+            Self::Tools(error) => Some(error),
             _ => None,
         }
     }

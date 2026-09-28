@@ -14,14 +14,14 @@ use agentkube_operator::{
     Dispatcher, ProviderDescriptor, build_catalogs, discover_ollama_models, reconcile_once, recover,
 };
 use agentkube_providers::ModelCapabilities;
-use agentkube_providers_http::{OllamaProvider, OpenAiProvider};
+use agentkube_providers_http::{AnthropicProvider, GeminiProvider, OllamaProvider, OpenAiProvider};
 use agentkube_queue::{InMemoryTaskQueue, TaskQueue};
 use agentkube_router::{
     DataResidency, ModelRouter, ModelRouting, ModelRoutingProfile, ProviderRegistry,
 };
 use agentkube_scheduler::{NodeLocality, Scheduler};
 use agentkube_sqlite::SqliteStores;
-use agentkube_workers::{RepositoryWorkerStateStore, SingleTurnRuntime};
+use agentkube_workers::{AgenticRuntime, RepositoryWorkerStateStore, ToolRegistry};
 use std::{
     error::Error,
     io,
@@ -66,8 +66,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let (registry, providers) = register_providers(&config).await?;
     let provider_total = providers.len();
-    let runtime = Arc::new(SingleTurnRuntime::new(
-        Arc::new(ModelRouter::new(registry)) as Arc<dyn ModelRouting>
+    let runtime = Arc::new(AgenticRuntime::new(
+        Arc::new(ModelRouter::new(registry)) as Arc<dyn ModelRouting>,
+        ToolRegistry::default(),
+        std::num::NonZeroU16::new(8).expect("eight turns is non-zero"),
     ));
     let node_id = NodeId::new();
     let active = Arc::new(AtomicU16::new(0));
@@ -104,7 +106,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut dispatch_tick = tokio::time::interval(config.operator().dispatch_interval().get());
     let mut heartbeat_tick = tokio::time::interval(config.worker().heartbeat_interval().get());
     let mut last_blocked = Vec::new();
-    let mut last_unmanaged = Vec::new();
     loop {
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
@@ -112,7 +113,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 break;
             }
             _ = reconcile_tick.tick() => {
-                match reconcile_once(&agents, &deployments, &worker_state).await {
+                match reconcile_once(&agents, &deployments, &worker_state, node_id).await {
                     Ok(summary) => {
                         for name in &summary.updated {
                             println!("reconcile: persisted status for agent {name:?}");
@@ -121,12 +122,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             last_blocked.clone_from(&summary.blocked);
                             if !summary.blocked.is_empty() {
                                 eprintln!("reconcile: blocked agents: {:?}", summary.blocked);
-                            }
-                        }
-                        if summary.unmanaged != last_unmanaged {
-                            last_unmanaged.clone_from(&summary.unmanaged);
-                            if !summary.unmanaged.is_empty() {
-                                eprintln!("reconcile: unmanaged deployments (instance management not yet wired): {:?}", summary.unmanaged);
                             }
                         }
                     }
@@ -191,6 +186,40 @@ async fn register_providers(
         registry.register(adapter, profiles(&catalogs.openai, DataResidency::Remote)?)?;
         providers.push(ProviderDescriptor::new(
             ProviderName::new(OpenAiProvider::PROVIDER_NAME)?,
+            NodeLocality::Cloud,
+            false,
+        ));
+    }
+    if let Some(key) = config.providers().anthropic_api_key()
+        && !catalogs.anthropic.is_empty()
+    {
+        let adapter: Arc<dyn agentkube_providers::ModelProvider> =
+            Arc::new(AnthropicProvider::new(
+                config.providers().anthropic_base_url(),
+                key.expose(),
+                catalogs.anthropic.clone(),
+            )?);
+        registry.register(
+            adapter,
+            profiles(&catalogs.anthropic, DataResidency::Remote)?,
+        )?;
+        providers.push(ProviderDescriptor::new(
+            ProviderName::new(AnthropicProvider::PROVIDER_NAME)?,
+            NodeLocality::Cloud,
+            false,
+        ));
+    }
+    if let Some(key) = config.providers().gemini_api_key()
+        && !catalogs.gemini.is_empty()
+    {
+        let adapter: Arc<dyn agentkube_providers::ModelProvider> = Arc::new(GeminiProvider::new(
+            config.providers().gemini_base_url(),
+            key.expose(),
+            catalogs.gemini.clone(),
+        )?);
+        registry.register(adapter, profiles(&catalogs.gemini, DataResidency::Remote)?)?;
+        providers.push(ProviderDescriptor::new(
+            ProviderName::new(GeminiProvider::PROVIDER_NAME)?,
             NodeLocality::Cloud,
             false,
         ));

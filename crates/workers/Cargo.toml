@@ -14,6 +14,7 @@ agentkube-queue = { path = "../queue" }
 agentkube-router = { path = "../router" }
 agentkube-storage = { path = "../storage" }
 agentkube-tasks = { path = "../tasks" }
+serde_json.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true

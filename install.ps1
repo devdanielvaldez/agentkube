@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  AgentKube installer for Windows (akctl + agentkube-api).
+  AgentKube installer for Windows (akctl + API + operator).
 
 .DESCRIPTION
   Downloads the release ZIP from GitHub Releases, verifies SHA256 when
@@ -19,13 +19,13 @@
   Install directory (default: $env:LocalAppData\AgentKube\bin).
 
 .PARAMETER Only
-  Install "all" (default), "akctl", or "agentkube-api".
+  Install "all" (default), "akctl", "agentkube-api", or "agentkube-operator".
 #>
 [CmdletBinding()]
 param(
   [string]$Version = $env:AGENTKUBE_VERSION,
   [string]$InstallDir = $env:AGENTKUBE_INSTALL_DIR,
-  [ValidateSet("all", "akctl", "agentkube-api")]
+  [ValidateSet("all", "akctl", "agentkube-api", "agentkube-operator")]
   [string]$Only = "all"
 )
 
@@ -80,7 +80,7 @@ try {
   $extractDir = Join-Path $tmp.FullName "extract"
   Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
 
-  $wanted = @("akctl", "agentkube-api")
+  $wanted = @("akctl", "agentkube-api", "agentkube-operator")
   if ($Only -ne "all") { $wanted = @($Only) }
   foreach ($bin in $wanted) {
     $src = Join-Path $extractDir "$bin.exe"

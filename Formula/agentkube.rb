@@ -31,7 +31,7 @@ class Agentkube < Formula
   end
 
   def install
-    bin.install "akctl", "agentkube-api"
+    bin.install "akctl", "agentkube-api", "agentkube-operator"
   end
 
   test do

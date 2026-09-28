@@ -75,7 +75,7 @@ jobs:
 
       - name: Build release binaries
         shell: bash
-        run: cargo build --locked --release -p agentkube-cli -p agentkube-api --target "${{ matrix.target }}"
+        run: cargo build --locked --release -p agentkube-cli -p agentkube-api -p agentkube-operator --target "${{ matrix.target }}"
 
       - name: Smoke test
         shell: bash
@@ -112,9 +112,10 @@ jobs:
           mkdir -p "$STAGE" dist
           cp "target/$TARGET/release/akctl" "$STAGE/"
           cp "target/$TARGET/release/agentkube-api" "$STAGE/"
+          cp "target/$TARGET/release/agentkube-operator" "$STAGE/"
           cp LICENSE "$STAGE/"
           ASSET="agentkube-${VERSION}-${TARGET}.tar.gz"
-          tar -czf "dist/$ASSET" -C "$STAGE" akctl agentkube-api LICENSE
+          tar -czf "dist/$ASSET" -C "$STAGE" akctl agentkube-api agentkube-operator LICENSE
           if command -v sha256sum >/dev/null 2>&1; then
             (cd dist && sha256sum "$ASSET" > "$ASSET.sha256")
           else
@@ -134,6 +135,7 @@ jobs:
           mkdir -p "$STAGE" dist
           cp "target/$TARGET/release/akctl.exe" "$STAGE/"
           cp "target/$TARGET/release/agentkube-api.exe" "$STAGE/"
+          cp "target/$TARGET/release/agentkube-operator.exe" "$STAGE/"
           cp LICENSE "$STAGE/"
           ASSET="agentkube-${VERSION}-${TARGET}.zip"
           powershell -NoProfile -Command "Compress-Archive -Path dist/stage/* -DestinationPath dist/$ASSET -Force"
