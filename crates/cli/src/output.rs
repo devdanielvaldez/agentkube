@@ -280,9 +280,31 @@ pub fn print_deployments_table(
     write_stdout(&render_deployments_table(documents, no_color), true)
 }
 
+/// Renders worker nodes with `NODE ACTIVE CAPACITY HEARTBEAT`.
+#[must_use]
+pub fn render_nodes_table(documents: &[crate::client::NodeStatus]) -> String {
+    let rows: Vec<Vec<String>> = documents
+        .iter()
+        .map(|document| {
+            vec![
+                document.node_id.to_string(),
+                document.active_executions.to_string(),
+                document.capacity.to_string(),
+                document.last_heartbeat_secs.to_string(),
+            ]
+        })
+        .collect();
+    format_table(&["NODE", "ACTIVE", "CAPACITY", "HEARTBEAT"], &rows)
+}
+
 /// Prints the task table to stdout.
 pub fn print_tasks_table(documents: &[TaskDocument], no_color: bool) -> Result<(), CliError> {
     write_stdout(&render_tasks_table(documents, no_color), true)
+}
+
+/// Prints the node table to stdout.
+pub fn print_nodes_table(documents: &[crate::client::NodeStatus]) -> Result<(), CliError> {
+    write_stdout(&render_nodes_table(documents), true)
 }
 
 /// Prints health status as a stable table.

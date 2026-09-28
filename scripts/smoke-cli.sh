@@ -181,6 +181,7 @@ expect_code 1 "queued task delete conflicts" -- delete task review-code
 # status aggregates everything running (3 agents, 1 deployment, 1 task)
 expect_out "status overview" "TASKS (1, QUEUED 1)" -- status
 expect_out "status json" '"desiredReplicas": 3' -- -o json status
+expect_out "get nodes" "NODE" -- get nodes
 
 # dry-run, invalid docs, missing resources
 { cat "$TMPDIR/agent.yaml"; printf '\n---\n'; cat "$TMPDIR/task.yaml"; } > "$TMPDIR/multi.yaml"

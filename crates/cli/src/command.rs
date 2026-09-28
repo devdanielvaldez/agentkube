@@ -149,6 +149,20 @@ async fn run_get(
 ) -> Result<(), CliError> {
     let page_size = validate_page_size(page_size)?;
     let mode = output_for_get(config);
+    if resource == GetResource::Nodes {
+        if page_size.is_some() || continue_token.is_some() {
+            return Err(CliError::usage(
+                "nodes are listed without pagination: omit --page-size and --continue",
+            ));
+        }
+        if name.is_some() {
+            return Err(CliError::usage(
+                "nodes do not support direct lookup: omit NAME to list",
+            ));
+        }
+        let items = client.list_nodes().await?;
+        return render_node_list(&items, mode, config.no_color);
+    }
     match (resource, name) {
         (GetResource::Agents, Some(value)) => {
             let document = client.get_agent(&value).await?;
@@ -179,6 +193,9 @@ async fn run_get(
                 .list_all_tasks(page_size, continue_token.as_deref())
                 .await?;
             render_task_list(&items, mode, config.no_color)
+        }
+        (GetResource::Nodes, _) => {
+            unreachable!("nodes return before resource dispatch")
         }
     }
 }
@@ -619,6 +636,18 @@ fn render_task_list(
         OutputMode::Table => output::print_tasks_table(items, no_color),
         OutputMode::Json => output::print_json(&task_list_response(items)),
         OutputMode::Yaml => output::print_yaml(&task_list_response(items)),
+    }
+}
+
+fn render_node_list(
+    items: &[crate::client::NodeStatus],
+    mode: OutputMode,
+    _no_color: bool,
+) -> Result<(), CliError> {
+    match mode {
+        OutputMode::Table => output::print_nodes_table(items),
+        OutputMode::Json => output::print_json(&items),
+        OutputMode::Yaml => output::print_yaml(&items),
     }
 }
 

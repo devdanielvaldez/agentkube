@@ -29,6 +29,22 @@ pub struct HealthResponse {
     pub version: String,
 }
 
+/// Client-side view of one worker node from `GET /v1/nodes`.
+///
+/// Field types mirror the server wire shape; the CLI never invents nodes.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeStatus {
+    /// Worker node identifier.
+    pub node_id: agentkube_core::NodeId,
+    /// Heartbeat time as Unix seconds.
+    pub last_heartbeat_secs: u64,
+    /// Executions in flight at heartbeat time.
+    pub active_executions: u16,
+    /// Worker execution capacity.
+    pub capacity: u16,
+}
+
 /// Typed API client.
 #[derive(Debug, Clone)]
 pub struct ApiClient {
@@ -531,6 +547,13 @@ impl ApiClient {
             )
             .await?;
         Self::handle_empty(&operation, response).await
+    }
+
+    /// Lists worker nodes with recorded heartbeats.
+    pub async fn list_nodes(&self) -> Result<Vec<NodeStatus>, CliError> {
+        let operation = "list nodes";
+        let response = self.send_get(operation, self.url("/v1/nodes")).await?;
+        Self::handle(operation, response).await
     }
 }
 

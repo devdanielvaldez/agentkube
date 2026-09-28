@@ -479,6 +479,42 @@ async fn status_shows_everything_running_prettily() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn get_nodes_lists_worker_nodes_without_pagination() {
+    let server = spawn_server().await;
+
+    akctl()
+        .args(["--server", &server.base_url, "get", "nodes"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("NODE"));
+
+    akctl()
+        .args(["--server", &server.base_url, "-o", "json", "get", "nodes"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("[]"));
+
+    // Nodes are list-only: names and pagination are usage errors.
+    akctl()
+        .args(["--server", &server.base_url, "get", "nodes", "some-node"])
+        .assert()
+        .failure()
+        .code(2);
+    akctl()
+        .args([
+            "--server",
+            &server.base_url,
+            "get",
+            "nodes",
+            "--page-size",
+            "10",
+        ])
+        .assert()
+        .failure()
+        .code(2);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn multi_doc_partial_apply_reports_exit_3_without_rollback_claim() {
     let server = spawn_server().await;
     // Second document duplicates the first task name, forcing a 409 after one success.

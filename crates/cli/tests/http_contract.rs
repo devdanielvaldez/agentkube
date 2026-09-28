@@ -20,6 +20,7 @@ use tokio::net::TcpListener;
 struct TestServer {
     base_url: String,
     tasks: Arc<InMemoryResourceRepository<AgentTask>>,
+    state: ApiState,
 }
 
 async fn spawn_server() -> TestServer {
@@ -37,7 +38,7 @@ async fn spawn_server_with_body_limit(max_body_bytes: usize) -> TestServer {
         tasks.clone(),
         queue.clone(),
     );
-    let app = router(state, max_body_bytes);
+    let app = router(state.clone(), max_body_bytes);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -46,6 +47,7 @@ async fn spawn_server_with_body_limit(max_body_bytes: usize) -> TestServer {
     TestServer {
         base_url: format!("http://{addr}"),
         tasks,
+        state,
     }
 }
 
@@ -558,4 +560,30 @@ async fn oversized_responses_are_discarded_without_dumping_bodies() {
         }
         other => panic!("expected oversized rejection, got {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn nodes_endpoint_lists_recorded_heartbeats() {
+    use agentkube_api::{NodeInfo, NodeRegistry};
+    use agentkube_core::NodeId;
+
+    let server = spawn_server().await;
+    let client = test_client(&server.base_url);
+    assert!(client.list_nodes().await.unwrap().is_empty());
+
+    let registry: Arc<NodeRegistry> = server.state.node_registry();
+    let node_id = NodeId::new();
+    registry
+        .record_heartbeat(NodeInfo::new(node_id, 2, 4.try_into().unwrap()))
+        .await;
+
+    let nodes = client.list_nodes().await.unwrap();
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0].node_id, node_id);
+    assert_eq!(nodes[0].active_executions, 2);
+    assert_eq!(nodes[0].capacity, 4);
+
+    let rendered = agentkube_cli::output::render_nodes_table(&nodes);
+    assert!(rendered.contains("NODE"), "{rendered}");
+    assert!(rendered.contains(&node_id.to_string()), "{rendered}");
 }

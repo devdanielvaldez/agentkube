@@ -36,6 +36,8 @@ pub enum GetResource {
     Deployments,
     /// Task resources, canonical `tasks`.
     Tasks,
+    /// Worker nodes, canonical `nodes` (list only).
+    Nodes,
 }
 
 impl GetResource {
@@ -46,6 +48,7 @@ impl GetResource {
             Self::Agents => "agents",
             Self::Deployments => "deployments",
             Self::Tasks => "tasks",
+            Self::Nodes => "nodes",
         }
     }
 }
@@ -58,8 +61,9 @@ impl FromStr for GetResource {
             "agent" | "agents" => Ok(Self::Agents),
             "deployment" | "deployments" => Ok(Self::Deployments),
             "task" | "tasks" => Ok(Self::Tasks),
+            "node" | "nodes" => Ok(Self::Nodes),
             other => Err(format!(
-                "invalid resource {other:?}: expected agents, deployments, or tasks"
+                "invalid resource {other:?}: expected agents, deployments, tasks, or nodes"
             )),
         }
     }
@@ -184,16 +188,16 @@ pub enum Command {
     },
     /// Get one resource or list resources of a kind.
     Get {
-        /// Resource kind: agents, deployments, or tasks (singular aliases accepted).
+        /// Resource kind: agents, deployments, tasks, or nodes (singular aliases accepted; nodes are list-only).
         #[arg(value_name = "RESOURCE")]
         resource: GetResource,
         /// Optional resource name. When omitted, all resources are listed.
         #[arg(value_name = "NAME")]
         name: Option<String>,
-        /// Page size used for list pagination (1..=200).
+        /// Page size used for list pagination (1..=200; not supported by nodes).
         #[arg(long, value_name = "N")]
         page_size: Option<u32>,
-        /// Continuation token to start listing from.
+        /// Continuation token to start listing from (not supported by nodes).
         #[arg(long = "continue", value_name = "TOKEN")]
         continue_token: Option<String>,
     },
@@ -242,6 +246,8 @@ mod tests {
             GetResource::Deployments
         );
         assert_eq!("TASKS".parse::<GetResource>().unwrap(), GetResource::Tasks);
+        assert_eq!("node".parse::<GetResource>().unwrap(), GetResource::Nodes);
+        assert_eq!(GetResource::Nodes.canonical(), "nodes");
     }
 
     #[test]
