@@ -43,24 +43,32 @@ New crate `agentkube-operator` with an `agentkube-operator` binary:
 - Dispatch tick: builds real `SchedulingCandidate`s (local node snapshot +
   ready instances + definitions + provider availability), calls
   `Scheduler::schedule` per queued task, and executes the winner with the
-  existing `Worker` + `SingleTurnRuntime` + a repository-backed
+  existing worker state machinery + bounded `AgenticRuntime` + a repository-backed
   `WorkerStateStore` (TaskId→key index rebuilt at boot).
 - Unschedulable tasks are left `QUEUED` with a visible warning, never
   force-assigned.
 - Done when: `apply -f task.yaml` reaches a terminal state end to end
   without human intervention, and crash-recovery behaves per Phase 1.
 
+Deployment reconciliation now materializes the requested number of embedded
+instances, updates replica status, and supports scale-up and safe idle
+scale-down. Dispatch claims queue leases before scheduling and runs independent
+ready replicas concurrently while renewing their leases.
+
 ## Phase 3 — Real inference (provider adapters)
 
 New crate `agentkube-providers-http` with `ModelProvider` implementations:
 
-- `OllamaProvider` (`/api/chat` on a configured base URL, default
-  `http://127.0.0.1:11434`) and `OpenAiProvider` (chat completions, key
-  from environment only, never logged).
+- `OllamaProvider`, `OpenAiProvider`, `AnthropicProvider`, and
+  `GeminiProvider`, with credentials read from configuration secrets and never
+  logged.
 - Registered in the router's `ProviderRegistry`; `Fixed` policies route by
   name, `Auto` policies use router selection. Tool-requiring agents are
   rejected with `Validation`, never silently downgraded.
 - Costs recorded from real usage; budgets keep enforcing.
+- The embedded runtime supports bounded multi-turn tool loops through an
+  explicit allowlisted `ToolRegistry`; missing and unauthorized tools fail
+  closed.
 - Done when: a task applied against local Ollama completes with model
   output, usage, and cost persisted in task status.
 

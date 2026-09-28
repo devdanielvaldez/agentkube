@@ -216,6 +216,7 @@ dependencies = [
  "agentkube-router",
  "agentkube-storage",
  "agentkube-tasks",
+ "serde_json",
  "tokio",
 ]
 
