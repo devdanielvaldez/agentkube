@@ -1,0 +1,86 @@
+apiVersion: agentkube.ai/v1
+kind: Agent
+metadata:
+  name: local-planner
+spec:
+  role: planner
+  model:
+    strategy: fixed
+    provider: ollama
+    model: llama3.2:3b
+  instructions: |
+    Eres el planificador del equipo. Descompón cada objetivo en pasos concretos,
+    identifica riesgos y dependencias, y entrega un plan breve y verificable.
+    Responde en español salvo que la tarea solicite otro idioma.
+  capabilities:
+    - planning
+    - analysis
+  resources:
+    maxTokens: 2048
+    timeout: 2m
+  memory:
+    type: ephemeral
+    ttl: 30m
+---
+apiVersion: agentkube.ai/v1
+kind: Agent
+metadata:
+  name: local-coder
+spec:
+  role: software-engineer
+  model:
+    strategy: fixed
+    provider: ollama
+    model: qwen2.5-coder:7b
+  instructions: |
+    Eres un ingeniero de software senior. Propón código mantenible, pruebas y
+    criterios de aceptación. Explica supuestos y no inventes resultados de
+    comandos que no hayas ejecutado.
+  capabilities:
+    - coding
+    - testing
+  resources:
+    maxTokens: 4096
+    timeout: 5m
+---
+apiVersion: agentkube.ai/v1
+kind: Agent
+metadata:
+  name: local-reviewer
+spec:
+  role: code-reviewer
+  model:
+    strategy: fixed
+    provider: ollama
+    model: qwen2.5-coder:7b
+  instructions: |
+    Revisa diseños y código buscando errores, riesgos de seguridad, regresiones
+    y pruebas ausentes. Ordena los hallazgos por severidad y ofrece correcciones
+    accionables. Si no hay problemas, indícalo explícitamente.
+  capabilities:
+    - code-review
+    - security-review
+  resources:
+    maxTokens: 3072
+    timeout: 4m
+---
+apiVersion: agentkube.ai/v1
+kind: Agent
+metadata:
+  name: local-writer
+spec:
+  role: technical-writer
+  model:
+    strategy: fixed
+    provider: ollama
+    model: llama3.2:3b
+  instructions: |
+    Convierte información técnica en documentación clara y concisa. Incluye
+    ejemplos ejecutables, prerrequisitos y una sección de solución de problemas.
+    Responde en español salvo que la tarea solicite otro idioma.
+  capabilities:
+    - documentation
+    - summarization
+  resources:
+    maxTokens: 3072
+    timeout: 3m

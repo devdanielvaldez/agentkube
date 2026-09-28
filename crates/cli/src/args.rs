@@ -210,6 +210,15 @@ pub enum Command {
         #[arg(value_name = "NAME")]
         name: String,
     },
+    /// Print the persisted output or failure for one task.
+    Logs {
+        /// Task name.
+        #[arg(value_name = "TASK")]
+        name: String,
+        /// Wait for a running task and print its terminal output or failure.
+        #[arg(short, long)]
+        follow: bool,
+    },
     /// Delete one resource.
     Delete {
         /// Resource kind: agent, deployment, or task (plural aliases accepted).
@@ -315,6 +324,18 @@ mod tests {
         match cli.command {
             Command::Apply { dry_run, .. } => assert_eq!(dry_run.as_deref(), Some("client")),
             other => panic!("expected apply, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn logs_accepts_task_name_and_follow() {
+        let cli = Cli::try_parse_from(["akctl", "logs", "review-code", "--follow"]).unwrap();
+        match cli.command {
+            Command::Logs { name, follow } => {
+                assert_eq!(name, "review-code");
+                assert!(follow);
+            }
+            other => panic!("expected logs, got {other:?}"),
         }
     }
 }

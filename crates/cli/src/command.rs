@@ -15,7 +15,8 @@ use crate::{
 use agentkube_agents::{AgentDefinition, AgentDeployment, ReplicaCount};
 use agentkube_core::{Metadata, Namespace};
 use agentkube_protocol::{ApiVersion, ListMetadata, ListResponse, ResourceKind, TypeMeta};
-use agentkube_tasks::AgentTask;
+use agentkube_tasks::{AgentTask, TaskDocument};
+use std::time::Duration;
 
 /// Validates `--page-size` in the inclusive range `1..=200`.
 pub fn validate_page_size(raw: Option<u32>) -> Result<Option<u32>, CliError> {
@@ -51,12 +52,87 @@ pub async fn execute(
             continue_token,
         } => run_get(client, config, resource, name, page_size, continue_token).await,
         Command::Describe { resource, name } => run_describe(client, config, resource, &name).await,
+        Command::Logs { name, follow } => run_logs(client, config, &name, follow).await,
         Command::Delete { resource, name } => run_delete(client, config, resource, &name).await,
         Command::Scale {
             resource,
             name,
             replicas,
         } => run_scale(client, config, resource, &name, replicas).await,
+    }
+}
+
+async fn run_logs(
+    client: &ApiClient,
+    config: &ResolvedConfig,
+    name: &str,
+    follow: bool,
+) -> Result<(), CliError> {
+    let mut last_revision = None;
+    loop {
+        let document = client.get_task(name).await?;
+        let status = document.status().ok_or_else(|| {
+            CliError::transport(
+                format!("get logs for task {name:?}"),
+                "server returned a task without status",
+            )
+        })?;
+
+        if follow && last_revision != Some(status.revision()) {
+            eprintln!(
+                "task {name:?}: state={:?} attempts={} agent={}",
+                status.state(),
+                status.attempts_started(),
+                status
+                    .assigned_agent()
+                    .map_or_else(|| "-".to_owned(), |agent| agent.to_string())
+            );
+            last_revision = Some(status.revision());
+        }
+
+        if !follow || status.state().is_terminal() {
+            return render_task_logs(&document, config.output.unwrap_or(OutputMode::Table));
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+}
+
+fn render_task_logs(document: &TaskDocument, mode: OutputMode) -> Result<(), CliError> {
+    let name = document.metadata().name().as_str();
+    let status = document.status().ok_or_else(|| {
+        CliError::transport(
+            format!("render logs for task {name:?}"),
+            "task has no status",
+        )
+    })?;
+    let record = serde_json::json!({
+        "task": name,
+        "taskId": status.task_id(),
+        "state": status.state(),
+        "attempts": status.attempts_started(),
+        "assignedAgent": status.assigned_agent(),
+        "result": status.result(),
+        "failure": status.failure(),
+    });
+    match mode {
+        OutputMode::Json => output::print_json(&record),
+        OutputMode::Yaml => output::print_yaml(&record),
+        OutputMode::Table => {
+            if let Some(result) = status.result() {
+                output::print_line(result.output())
+            } else if let Some(failure) = status.failure() {
+                output::print_line(&format!(
+                    "task {name:?} failed ({:?}): {}",
+                    failure.kind(),
+                    failure.message()
+                ))
+            } else {
+                output::print_line(&format!(
+                    "task {name:?} is {:?}; no execution output is available yet",
+                    status.state()
+                ))
+            }
+        }
     }
 }
 

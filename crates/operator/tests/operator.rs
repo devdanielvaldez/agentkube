@@ -9,8 +9,9 @@ use agentkube_agents::{
     ModelName, ModelPolicy, ProviderName, ReplicaCount,
 };
 use agentkube_api::NodeRegistry;
+use agentkube_config::ProvidersConfig;
 use agentkube_core::{AgentId, Metadata, NodeId, Resource};
-use agentkube_operator::{Dispatcher, ProviderDescriptor, reconcile_once, recover};
+use agentkube_operator::{Dispatcher, ProviderDescriptor, build_catalogs, reconcile_once, recover};
 use agentkube_providers::{
     FinishReason, GenerationResponse, GenerationUsage, MessageText, ModelCapabilities,
     ModelProvider, ScriptedProvider,
@@ -37,6 +38,28 @@ use std::{
 
 const PROVIDER: &str = "scripted";
 const MODEL: &str = "test-model";
+
+#[test]
+fn discovered_ollama_tags_inherit_known_base_capabilities() {
+    let (catalogs, warnings) = build_catalogs(
+        &ProvidersConfig::default(),
+        &["qwen2.5-coder:7b".to_owned()],
+    )
+    .unwrap();
+    let tagged = catalogs
+        .ollama
+        .iter()
+        .find(|(name, _)| name.as_str() == "qwen2.5-coder:7b")
+        .map(|(_, capabilities)| capabilities)
+        .unwrap();
+
+    assert_eq!(tagged.max_output_tokens().get(), 4_096);
+    assert!(
+        !warnings
+            .iter()
+            .any(|warning| warning.contains("qwen2.5-coder:7b"))
+    );
+}
 
 fn definition(name: &str) -> AgentDefinition {
     AgentDefinition::new(

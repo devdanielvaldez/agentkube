@@ -49,6 +49,7 @@ impl ModelRouter {
         };
         let mut candidates = Vec::new();
         let mut provider_errors = Vec::new();
+        let mut rejections = Vec::new();
 
         for (provider_name, registration) in snapshot {
             if !policy_allows_provider(request.policy(), &provider_name) {
@@ -62,6 +63,10 @@ impl ModelRouter {
                 }
             };
             if !health.accepts_traffic() {
+                record_rejection(
+                    &mut rejections,
+                    format!("provider {provider_name} is unavailable"),
+                );
                 continue;
             }
             let health_rank = match health.status() {
@@ -79,15 +84,51 @@ impl ModelRouter {
                     continue;
                 };
                 let constraints = request.constraints();
-                if !profile.residency().satisfies(constraints.privacy())
-                    || constraints
-                        .minimum_context()
-                        .is_some_and(|required| required > capabilities.context_window())
-                    || request.generation().max_output_tokens() > capabilities.max_output_tokens()
-                    || (!request.generation().tools().is_empty() && !capabilities.supports_tools())
-                    || ((constraints.requires_streaming() || force_streaming)
-                        && !capabilities.supports_streaming())
+                let route = format!("{provider_name}/{model_name}");
+                if !profile.residency().satisfies(constraints.privacy()) {
+                    record_rejection(
+                        &mut rejections,
+                        format!(
+                            "{route} does not satisfy {:?} privacy",
+                            constraints.privacy()
+                        ),
+                    );
+                    continue;
+                }
+                if let Some(required) = constraints.minimum_context()
+                    && required > capabilities.context_window()
                 {
+                    record_rejection(
+                        &mut rejections,
+                        format!(
+                            "{route} context {} is below required {required}",
+                            capabilities.context_window()
+                        ),
+                    );
+                    continue;
+                }
+                if request.generation().max_output_tokens() > capabilities.max_output_tokens() {
+                    record_rejection(
+                        &mut rejections,
+                        format!(
+                            "{route} output limit {} is below requested {}",
+                            capabilities.max_output_tokens(),
+                            request.generation().max_output_tokens()
+                        ),
+                    );
+                    continue;
+                }
+                if !request.generation().tools().is_empty() && !capabilities.supports_tools() {
+                    record_rejection(&mut rejections, format!("{route} does not support tools"));
+                    continue;
+                }
+                if (constraints.requires_streaming() || force_streaming)
+                    && !capabilities.supports_streaming()
+                {
+                    record_rejection(
+                        &mut rejections,
+                        format!("{route} does not support streaming"),
+                    );
                     continue;
                 }
 
@@ -104,6 +145,12 @@ impl ModelRouter {
                     .maximum_cost()
                     .is_some_and(|maximum| cost > maximum)
                 {
+                    record_rejection(
+                        &mut rejections,
+                        format!(
+                            "{route} estimated cost {cost} micro-USD exceeds the configured maximum"
+                        ),
+                    );
                     continue;
                 }
                 candidates.push(Candidate {
@@ -123,7 +170,10 @@ impl ModelRouter {
 
         candidates.sort_by(|left, right| compare_candidates(left, right, objectives));
         if candidates.is_empty() {
-            Err(RouterError::NoEligibleModels { provider_errors })
+            Err(RouterError::NoEligibleModels {
+                provider_errors,
+                rejections,
+            })
         } else {
             Ok(candidates)
         }
@@ -160,6 +210,7 @@ impl ModelRouting for ModelRouter {
                 .map(|candidate| candidate.decision)
                 .ok_or_else(|| RouterError::NoEligibleModels {
                     provider_errors: Vec::new(),
+                    rejections: Vec::new(),
                 })
         })
     }
@@ -212,6 +263,13 @@ impl ModelRouting for ModelRouter {
             }
             Err(RouterError::AllProvidersFailed(failures))
         })
+    }
+}
+
+fn record_rejection(rejections: &mut Vec<String>, reason: String) {
+    const MAX_REJECTIONS: usize = 16;
+    if rejections.len() < MAX_REJECTIONS {
+        rejections.push(reason);
     }
 }
 

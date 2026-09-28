@@ -414,6 +414,26 @@ async fn task_apply_is_queued_and_non_terminal_delete_conflicts() {
         .success()
         .stdout(predicates::str::contains("QUEUED"));
 
+    akctl()
+        .args(["--server", &server.base_url, "logs", "review-code"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("no execution output"))
+        .stdout(predicates::str::contains("Queued"));
+
+    akctl()
+        .args([
+            "--server",
+            &server.base_url,
+            "--output",
+            "json",
+            "logs",
+            "review-code",
+        ])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"state\": \"QUEUED\""));
+
     // Deleting a QUEUED task conflicts with exit 1.
     akctl()
         .args([

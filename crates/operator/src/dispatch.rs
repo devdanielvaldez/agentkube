@@ -321,6 +321,8 @@ impl Dispatcher {
         .into_iter()
         .flatten()
         .min();
+        let task_name = claim.task().metadata().name().as_str().to_owned();
+        let agent_name = claim.definition().metadata().name().as_str().to_owned();
         self.active.fetch_add(1, Ordering::SeqCst);
         self.record_heartbeat().await;
         Ok(Some(PreparedExecution {
@@ -328,6 +330,8 @@ impl Dispatcher {
             claim,
             task_id,
             agent_id,
+            task_name,
+            agent_name,
             execution_timeout,
         }))
     }
@@ -342,8 +346,13 @@ impl Dispatcher {
             claim,
             task_id,
             agent_id,
+            task_name,
+            agent_name,
             execution_timeout,
         } = prepared;
+        eprintln!(
+            "execution: task={task_name:?} task_id={task_id} agent={agent_name:?} agent_id={agent_id} started"
+        );
         let execution = self.runtime.execute(claim);
         tokio::pin!(execution);
         let timeout_duration = execution_timeout
@@ -377,6 +386,7 @@ impl Dispatcher {
         };
         match outcome {
             Ok(output) => {
+                let usage = output.result().usage();
                 self.state
                     .complete(task_id, agent_id, output.result().clone())
                     .await
@@ -384,25 +394,38 @@ impl Dispatcher {
                 self.queue
                     .acknowledge(lease.lease_id(), self.node_id)
                     .await?;
+                eprintln!(
+                    "execution: task={task_name:?} task_id={task_id} agent={agent_name:?} agent_id={agent_id} completed input_tokens={} output_tokens={} cost_micro_usd={}",
+                    usage.input_tokens(),
+                    usage.output_tokens(),
+                    usage.cost_micro_usd()
+                );
             }
-            Err(failure) => match self.state.fail(task_id, agent_id, failure.clone()).await {
-                Ok(agentkube_workers::FailureDisposition::Requeued { delay }) => {
-                    self.queue
-                        .release(lease.lease_id(), self.node_id, delay)
-                        .await?;
+            Err(failure) => {
+                eprintln!(
+                    "execution: task={task_name:?} task_id={task_id} agent={agent_name:?} agent_id={agent_id} failed kind={:?} message={:?}",
+                    failure.kind(),
+                    failure.message()
+                );
+                match self.state.fail(task_id, agent_id, failure.clone()).await {
+                    Ok(agentkube_workers::FailureDisposition::Requeued { delay }) => {
+                        self.queue
+                            .release(lease.lease_id(), self.node_id, delay)
+                            .await?;
+                    }
+                    Ok(agentkube_workers::FailureDisposition::Terminal) => {
+                        self.queue
+                            .acknowledge(lease.lease_id(), self.node_id)
+                            .await?;
+                    }
+                    Err(state_error) => {
+                        self.queue
+                            .release(lease.lease_id(), self.node_id, None)
+                            .await?;
+                        return Err(OperatorError::Worker(state_error.to_string()));
+                    }
                 }
-                Ok(agentkube_workers::FailureDisposition::Terminal) => {
-                    self.queue
-                        .acknowledge(lease.lease_id(), self.node_id)
-                        .await?;
-                }
-                Err(state_error) => {
-                    self.queue
-                        .release(lease.lease_id(), self.node_id, None)
-                        .await?;
-                    return Err(OperatorError::Worker(state_error.to_string()));
-                }
-            },
+            }
         }
         self.record_heartbeat().await;
         Ok(DispatchSummary {
@@ -432,6 +455,8 @@ struct PreparedExecution {
     claim: ExecutionClaim,
     task_id: agentkube_core::TaskId,
     agent_id: agentkube_core::AgentId,
+    task_name: String,
+    agent_name: String,
     execution_timeout: Option<HumanDuration>,
 }
 

@@ -1,0 +1,57 @@
+apiVersion: agentkube.ai/v1
+kind: AgentDeployment
+metadata:
+  name: local-coding-pool
+spec:
+  replicas: 2
+  selector:
+    roles:
+      - software-engineer
+    capabilities:
+      - coding
+      - testing
+  template:
+    role: software-engineer
+    model:
+      strategy: fixed
+      provider: ollama
+      model: qwen2.5-coder:7b
+    instructions: |
+      Implementa soluciones pequeñas y comprobables. Devuelve el código o diff
+      propuesto, pruebas relevantes y cualquier riesgo pendiente.
+    capabilities:
+      - coding
+      - testing
+    resources:
+      maxTokens: 4096
+      timeout: 5m
+  restartPolicy: onFailure
+---
+apiVersion: agentkube.ai/v1
+kind: AgentDeployment
+metadata:
+  name: local-content-pool
+spec:
+  replicas: 2
+  selector:
+    roles:
+      - technical-writer
+    capabilities:
+      - documentation
+      - summarization
+  template:
+    role: technical-writer
+    model:
+      strategy: fixed
+      provider: ollama
+      model: llama3.2:3b
+    instructions: |
+      Produce documentación estructurada y resúmenes fieles. No inventes datos;
+      separa claramente hechos, supuestos y recomendaciones.
+    capabilities:
+      - documentation
+      - summarization
+    resources:
+      maxTokens: 3072
+      timeout: 3m
+  restartPolicy: onFailure

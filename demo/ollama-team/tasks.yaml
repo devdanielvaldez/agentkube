@@ -1,0 +1,85 @@
+apiVersion: agentkube.ai/v1
+kind: AgentTask
+metadata:
+  name: plan-local-api
+spec:
+  objective: |
+    Diseña un plan de implementación para una API REST de notas con CRUD,
+    persistencia SQLite, validación, pruebas y métricas básicas.
+  requirements:
+    capabilities:
+      - planning
+    preferredRoles:
+      - planner
+    allowedProviders:
+      - ollama
+    privacy: localOnly
+  priority: high
+  budget:
+    maxTokens: 800
+    timeout: 2m
+---
+apiVersion: agentkube.ai/v1
+kind: AgentTask
+metadata:
+  name: implement-health-handler
+spec:
+  objective: |
+    Escribe en Rust con Axum un handler GET /health que devuelva JSON con los
+    campos status y version. Incluye el router y pruebas unitarias del endpoint.
+  requirements:
+    capabilities:
+      - coding
+      - testing
+    preferredRoles:
+      - software-engineer
+    allowedProviders:
+      - ollama
+    privacy: localOnly
+  priority: high
+  budget:
+    maxTokens: 1400
+    timeout: 4m
+---
+apiVersion: agentkube.ai/v1
+kind: AgentTask
+metadata:
+  name: review-auth-design
+spec:
+  objective: |
+    Revisa este diseño: tokens bearer permanentes guardados en texto plano,
+    enviados por query string y registrados en logs. Identifica vulnerabilidades
+    y propone un diseño seguro con una ruta clara de migración.
+  requirements:
+    capabilities:
+      - security-review
+    preferredRoles:
+      - code-reviewer
+    allowedProviders:
+      - ollama
+    privacy: localOnly
+  priority: critical
+  budget:
+    maxTokens: 1000
+    timeout: 3m
+---
+apiVersion: agentkube.ai/v1
+kind: AgentTask
+metadata:
+  name: write-agentkube-quickstart
+spec:
+  objective: |
+    Redacta un quickstart corto para ejecutar agentes locales con AgentKube y
+    Ollama. Incluye instalación, arranque, aplicación de YAML y verificación.
+  requirements:
+    capabilities:
+      - documentation
+    preferredRoles:
+      - technical-writer
+    allowedProviders:
+      - ollama
+    privacy: localOnly
+  priority: normal
+  budget:
+    maxTokens: 1200
+    timeout: 3m

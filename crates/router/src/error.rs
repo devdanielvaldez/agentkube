@@ -59,6 +59,8 @@ pub enum RouterError {
     NoEligibleModels {
         /// Health or estimation failures encountered while evaluating candidates.
         provider_errors: Vec<ProviderError>,
+        /// Safe explanations for routes rejected by deterministic constraints.
+        rejections: Vec<String>,
     },
     /// A non-retryable provider failure stopped failover.
     ProviderRejected {
@@ -82,11 +84,20 @@ impl fmt::Display for RouterError {
             Self::ModelNotRegistered { provider, model } => {
                 write!(formatter, "model {model} is not registered for {provider}")
             }
-            Self::NoEligibleModels { provider_errors } => write!(
-                formatter,
-                "no model satisfies routing constraints ({} provider errors)",
-                provider_errors.len()
-            ),
+            Self::NoEligibleModels {
+                provider_errors,
+                rejections,
+            } => {
+                write!(
+                    formatter,
+                    "no model satisfies routing constraints ({} provider errors)",
+                    provider_errors.len()
+                )?;
+                if !rejections.is_empty() {
+                    write!(formatter, ": {}", rejections.join("; "))?;
+                }
+                Ok(())
+            }
             Self::ProviderRejected {
                 error,
                 prior_failures,

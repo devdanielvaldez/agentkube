@@ -160,6 +160,28 @@ fn fixed_policy_selects_exactly_the_requested_provider_and_model() {
 }
 
 #[test]
+fn ineligible_model_error_explains_the_output_limit() {
+    let registry = Arc::new(ProviderRegistry::new());
+    let local = provider("local", "small-model", 0, 0, false, true);
+    register(
+        &registry,
+        &local,
+        "small-model",
+        profile(7_000, "1s", DataResidency::Local),
+    );
+    let router = ModelRouter::new(registry);
+    let request = RoutingRequest::new(
+        ModelPolicy::fixed(name("local"), model("small-model")),
+        generation().with_max_output_tokens(NonZeroU32::new(9_000).unwrap()),
+    );
+
+    let error = ready(router.route(&request)).unwrap_err();
+
+    assert!(error.to_string().contains("output limit 8192"));
+    assert!(error.to_string().contains("requested 9000"));
+}
+
+#[test]
 fn automatic_routing_honors_objective_precedence() {
     let registry = Arc::new(ProviderRegistry::new());
     let quality = provider("quality", "quality-model", 9_000_000, 9_000_000, true, true);

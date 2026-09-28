@@ -1,4 +1,21 @@
-# Demo: three local clusters
+# Demos de AgentKube
+
+## Equipo de agentes con Ollama (inferencia real)
+
+[`ollama-team/`](ollama-team/) contiene cuatro agentes especializados, dos
+deployments y tareas listas para ejecutar contra Ollama mediante el operador
+durable:
+
+```bash
+ollama pull llama3.2:3b
+ollama pull qwen2.5-coder:7b
+./demo/ollama-team/run.sh
+```
+
+Consulta [`ollama-team/README.md`](ollama-team/README.md) para ejecución
+manual, configuración y comandos de inspección.
+
+## Tres clusters de API (recorrido del control plane)
 
 Each `agentkube-api` process is a self-contained cluster with isolated
 in-memory state. This demo runs three of them on one machine and operates
@@ -10,10 +27,8 @@ all three with `akctl --server <url>`:
 | `cloud`        | http://127.0.0.1:18082 | Hosted providers (`openai`, `anthropic`) |
 | `edge`         | http://127.0.0.1:18083 | Tiny on-device footprint           |
 
-> The provider/model names in the manifests are declarative labels: the demo
-> API server stores and serves them, but no real inference runs. Point them at
-> your Ollama models (e.g. `llama3.1`, `qwen2.5-coder`) so the specs already
-> match your local setup when workers arrive.
+> Esta demo multinodo usa `agentkube-api`: almacena y sirve los recursos, pero
+> no ejecuta inferencia. Para tareas reales con Ollama usa `ollama-team/`.
 
 ## Run it
 

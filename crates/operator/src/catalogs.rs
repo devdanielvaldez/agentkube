@@ -103,6 +103,12 @@ pub fn build_catalogs(
             replace_model(&mut ollama, entry)?;
         }
         for name in discovered_ollama {
+            let inherited = name.rsplit_once(':').and_then(|(base, _)| {
+                ollama
+                    .iter()
+                    .find(|(existing, _)| existing.as_str() == base)
+                    .map(|(_, capabilities)| capabilities.clone())
+            });
             for key in discovery_keys(name) {
                 if ollama.iter().any(|(existing, _)| existing.as_str() == key) {
                     continue;
@@ -111,10 +117,16 @@ pub fn build_catalogs(
                     warnings.push(format!("ignoring undiscoverable ollama model name {key:?}"));
                     continue;
                 };
-                ollama.push((model, fallback_caps()?));
-                warnings.push(format!(
-                    "ollama model {key:?} uses fallback capabilities; add a catalog entry for exact specs"
-                ));
+                if key == *name
+                    && let Some(capabilities) = inherited.clone()
+                {
+                    ollama.push((model, capabilities));
+                } else {
+                    ollama.push((model, fallback_caps()?));
+                    warnings.push(format!(
+                        "ollama model {key:?} uses fallback capabilities; add a catalog entry for exact specs"
+                    ));
+                }
             }
         }
     }
