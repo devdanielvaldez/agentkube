@@ -1,7 +1,7 @@
 use agentkube_config::{
     AuthConfigPatch, ConfigError, ConfigLoader, ConfigPatch, ConfigSource, EnvironmentSource,
-    JsonFileSource, LogLevel, OperatorConfigPatch, ProvidersConfigPatch, RuntimeEnvironment,
-    SecretString, StorageConfigPatch, WorkerConfigPatch,
+    JsonFileSource, JsonSource, LogLevel, OperatorConfigPatch, ProvidersConfigPatch,
+    RuntimeEnvironment, SecretString, StorageConfigPatch, WorkerConfigPatch,
 };
 use std::{fs, num::NonZeroU16, path::PathBuf, process, time::SystemTime};
 
@@ -185,6 +185,58 @@ fn programmatic_patches_cover_the_new_sections() {
     assert_eq!(config.operator().dispatch_interval().to_string(), "2s");
     assert!(config.providers().openai_api_key().is_some());
     assert!(config.auth().token().is_some());
+}
+
+#[test]
+fn model_catalog_entries_load_from_json_and_validate() {
+    let path = temporary_config_path();
+    fs::write(
+        &path,
+        r#"{
+            "providers": {
+                "openaiModels": [{
+                    "name": "gpt-4o",
+                    "contextWindowTokens": 128000,
+                    "maxOutputTokens": 16384,
+                    "supportsTools": true,
+                    "supportsStreaming": true,
+                    "inputPrice": 2500,
+                    "outputPrice": 10000
+                }]
+            }
+        }"#,
+    )
+    .expect("write temporary configuration");
+
+    let config = ConfigLoader::new()
+        .with_source(JsonFileSource::new(&path))
+        .load()
+        .expect("load catalog configuration");
+    fs::remove_file(&path).expect("remove temporary configuration");
+
+    let models = config.providers().openai_models();
+    assert_eq!(models.len(), 1);
+    assert_eq!(models[0].name(), "gpt-4o");
+    assert_eq!(models[0].context_window_tokens().get(), 128000);
+
+    let entry = r#"{
+        "name": "gpt-4o",
+        "contextWindowTokens": 128000,
+        "maxOutputTokens": 16384,
+        "supportsTools": true,
+        "supportsStreaming": true,
+        "inputPrice": 2500,
+        "outputPrice": 10000
+    }"#;
+    let bad = JsonSource::new(
+        "duplicates",
+        format!(r#"{{"providers": {{"openaiModels": [{entry}, {entry}]}}}}"#),
+    );
+    let error = ConfigLoader::new()
+        .with_source(bad)
+        .load()
+        .expect_err("duplicate model names are rejected");
+    assert!(error.to_string().contains("providers.openaiModels"));
 }
 
 #[test]

@@ -17,9 +17,9 @@ pub use error::{ConfigError, ConfigValidationError};
 pub use loader::ConfigLoader;
 pub use model::{
     AgentKubeConfig, AuthConfig, AuthConfigPatch, ConfigPatch, ControlPlaneConfig,
-    ControlPlaneConfigPatch, LogLevel, OperatorConfig, OperatorConfigPatch, ProvidersConfig,
-    ProvidersConfigPatch, RuntimeEnvironment, SamplingRatio, SamplingRatioError, SecretString,
-    StorageConfig, StorageConfigPatch, TelemetryConfig, TelemetryConfigPatch, WorkerConfig,
-    WorkerConfigPatch,
+    ControlPlaneConfigPatch, LogLevel, OperatorConfig, OperatorConfigPatch, ProviderModelEntry,
+    ProvidersConfig, ProvidersConfigPatch, RuntimeEnvironment, SamplingRatio, SamplingRatioError,
+    SecretString, StorageConfig, StorageConfigPatch, TelemetryConfig, TelemetryConfigPatch,
+    WorkerConfig, WorkerConfigPatch,
 };
 pub use source::{ConfigSource, EnvironmentSource, JsonFileSource, JsonSource};

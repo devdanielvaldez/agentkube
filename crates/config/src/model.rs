@@ -1,6 +1,13 @@
 use crate::{ConfigValidationError, HumanDuration};
 use serde::{Deserialize, Deserializer, Serialize, de};
-use std::{error::Error, fmt, net::SocketAddr, num::NonZeroU16, path::PathBuf, str::FromStr};
+use std::{
+    error::Error,
+    fmt,
+    net::SocketAddr,
+    num::{NonZeroU16, NonZeroU32},
+    path::PathBuf,
+    str::FromStr,
+};
 
 const DEFAULT_MAX_REQUEST_BODY_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_WORKER_CONCURRENCY: u16 = 4096;
@@ -131,6 +138,8 @@ impl AgentKubeConfig {
                 "must use http or https",
             ));
         }
+        validate_model_entries(&self.providers.ollama_models, "providers.ollamaModels")?;
+        validate_model_entries(&self.providers.openai_models, "providers.openaiModels")?;
         Ok(())
     }
 
@@ -439,6 +448,67 @@ impl fmt::Display for SecretStringError {
 
 impl Error for SecretStringError {}
 
+/// Model specification attached to a provider catalog entry.
+///
+/// Catalogs are explicit: unknown models are never guessed. Entries are
+/// typically supplied through a JSON configuration file, as environment
+/// variables cannot express lists.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderModelEntry {
+    name: String,
+    context_window_tokens: NonZeroU32,
+    max_output_tokens: NonZeroU32,
+    supports_tools: bool,
+    supports_streaming: bool,
+    input_price: u64,
+    output_price: u64,
+}
+
+impl ProviderModelEntry {
+    /// Returns the model name (validated as a [`ModelName`](agentkube_agents::ModelName) on load).
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the total input and output context window in tokens.
+    #[must_use]
+    pub const fn context_window_tokens(&self) -> NonZeroU32 {
+        self.context_window_tokens
+    }
+
+    /// Returns the maximum output-token request.
+    #[must_use]
+    pub const fn max_output_tokens(&self) -> NonZeroU32 {
+        self.max_output_tokens
+    }
+
+    /// Returns whether function calling is supported.
+    #[must_use]
+    pub const fn supports_tools(&self) -> bool {
+        self.supports_tools
+    }
+
+    /// Returns whether incremental output is supported.
+    #[must_use]
+    pub const fn supports_streaming(&self) -> bool {
+        self.supports_streaming
+    }
+
+    /// Returns input list price in micro-USD per million tokens.
+    #[must_use]
+    pub const fn input_price(&self) -> u64 {
+        self.input_price
+    }
+
+    /// Returns output list price in micro-USD per million tokens.
+    #[must_use]
+    pub const fn output_price(&self) -> u64 {
+        self.output_price
+    }
+}
+
 /// Model provider connectivity for inference.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -448,6 +518,10 @@ pub struct ProvidersConfig {
     openai_base_url: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     openai_api_key: Option<SecretString>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    ollama_models: Vec<ProviderModelEntry>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    openai_models: Vec<ProviderModelEntry>,
 }
 
 impl ProvidersConfig {
@@ -475,6 +549,18 @@ impl ProvidersConfig {
         self.openai_api_key.as_ref()
     }
 
+    /// Returns explicitly configured Ollama catalog entries.
+    #[must_use]
+    pub fn ollama_models(&self) -> &[ProviderModelEntry] {
+        &self.ollama_models
+    }
+
+    /// Returns explicitly configured OpenAI catalog entries.
+    #[must_use]
+    pub fn openai_models(&self) -> &[ProviderModelEntry] {
+        &self.openai_models
+    }
+
     fn apply(&mut self, patch: ProvidersConfigPatch) {
         if let Some(value) = patch.ollama_enabled {
             self.ollama_enabled = value;
@@ -488,6 +574,12 @@ impl ProvidersConfig {
         if let Some(value) = patch.openai_api_key {
             self.openai_api_key = Some(value);
         }
+        if let Some(value) = patch.ollama_models {
+            self.ollama_models = value;
+        }
+        if let Some(value) = patch.openai_models {
+            self.openai_models = value;
+        }
     }
 }
 
@@ -498,6 +590,8 @@ impl Default for ProvidersConfig {
             ollama_base_url: "http://127.0.0.1:11434".to_owned(),
             openai_base_url: "https://api.openai.com/v1".to_owned(),
             openai_api_key: None,
+            ollama_models: Vec::new(),
+            openai_models: Vec::new(),
         }
     }
 }
@@ -529,6 +623,31 @@ impl AuthConfig {
 
 fn is_http_url(value: &str) -> bool {
     value.starts_with("http://") || value.starts_with("https://")
+}
+
+fn validate_model_entries(
+    entries: &[ProviderModelEntry],
+    field: &'static str,
+) -> Result<(), ConfigValidationError> {
+    use std::collections::BTreeSet;
+    let mut seen = BTreeSet::new();
+    for entry in entries {
+        // ModelName validation lives in agentkube-agents; a name that fails
+        // there can never route, so reject it at configuration load time.
+        if entry.name.parse::<agentkube_agents::ModelName>().is_err() {
+            return Err(ConfigValidationError::new(
+                field,
+                "model names must be valid",
+            ));
+        }
+        if !seen.insert(entry.name.clone()) {
+            return Err(ConfigValidationError::new(
+                field,
+                "model names must be unique",
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Logging and distributed-tracing settings.
@@ -858,6 +977,8 @@ pub struct ProvidersConfigPatch {
     pub(crate) ollama_base_url: Option<String>,
     pub(crate) openai_base_url: Option<String>,
     pub(crate) openai_api_key: Option<SecretString>,
+    pub(crate) ollama_models: Option<Vec<ProviderModelEntry>>,
+    pub(crate) openai_models: Option<Vec<ProviderModelEntry>>,
 }
 
 impl ProvidersConfigPatch {
@@ -886,6 +1007,20 @@ impl ProvidersConfigPatch {
     #[must_use]
     pub fn with_openai_api_key(mut self, key: SecretString) -> Self {
         self.openai_api_key = Some(key);
+        self
+    }
+
+    /// Replaces the explicit Ollama catalog entries.
+    #[must_use]
+    pub fn with_ollama_models(mut self, models: Vec<ProviderModelEntry>) -> Self {
+        self.ollama_models = Some(models);
+        self
+    }
+
+    /// Replaces the explicit OpenAI catalog entries.
+    #[must_use]
+    pub fn with_openai_models(mut self, models: Vec<ProviderModelEntry>) -> Self {
+        self.openai_models = Some(models);
         self
     }
 }
