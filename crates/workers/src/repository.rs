@@ -18,7 +18,7 @@ use agentkube_core::{AgentId, NodeId, Resource, ResourceUid, TaskId};
 use agentkube_storage::{ResourceKey, ResourceRepository};
 use agentkube_tasks::{AgentTask, TaskFailure, TaskOperationError, TaskResult, TaskState};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, Mutex, MutexGuard},
 };
 
@@ -28,6 +28,7 @@ struct StoreInner {
     agents: HashMap<AgentId, AgentInstance>,
     definitions: HashMap<ResourceUid, AgentDefinition>,
     desired_instances: HashMap<ResourceUid, usize>,
+    outdated_instances: HashSet<AgentId>,
 }
 
 impl StoreInner {
@@ -193,8 +194,35 @@ impl RepositoryWorkerStateStore {
     ) -> Result<Vec<AgentInstance>, WorkerStateError> {
         let mut inner = self.lock()?;
         let owner = definition.metadata().uid();
+        if inner
+            .definitions
+            .get(&owner)
+            .is_some_and(|current| current.spec() != definition.spec())
+        {
+            let outdated: Vec<_> = inner
+                .agents
+                .values()
+                .filter(|agent| agent.definition_uid() == owner)
+                .map(AgentInstance::id)
+                .collect();
+            inner.outdated_instances.extend(outdated);
+        }
         inner.definitions.insert(owner, definition.clone());
         inner.desired_instances.insert(owner, desired);
+        let removable_outdated: Vec<_> = inner
+            .agents
+            .values()
+            .filter(|agent| {
+                agent.definition_uid() == owner
+                    && inner.outdated_instances.contains(&agent.id())
+                    && agent.current_task().is_none()
+            })
+            .map(AgentInstance::id)
+            .collect();
+        for id in removable_outdated {
+            inner.agents.remove(&id);
+            inner.outdated_instances.remove(&id);
+        }
         inner.agents.retain(|_, agent| {
             agent.definition_uid() != owner
                 || matches!(

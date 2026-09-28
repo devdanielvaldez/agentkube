@@ -327,6 +327,20 @@ async fn deployment_reconcile_creates_scales_and_reports_live_replicas() {
     let persisted = stores.deployments().list(None).await.unwrap().remove(0);
     assert_eq!(persisted.status().ready_replicas().get(), 1);
     assert_eq!(state.instances().unwrap().len(), 1);
+
+    stores
+        .deployments()
+        .delete(
+            &agentkube_storage::ResourceKey::from(persisted.metadata()),
+            persisted.metadata().resource_version(),
+        )
+        .await
+        .unwrap();
+    reconcile_once(&stores.agents(), &stores.deployments(), &state, node_id)
+        .await
+        .unwrap();
+    assert!(stores.agents().list(None).await.unwrap().is_empty());
+    assert!(state.instances().unwrap().is_empty());
 }
 
 #[tokio::test]

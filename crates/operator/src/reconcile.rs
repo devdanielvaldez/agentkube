@@ -12,7 +12,7 @@ use agentkube_controllers::{AgentDefinitionReconciler, ReconcileState};
 use agentkube_core::{Metadata, NodeId, Resource};
 use agentkube_storage::{ResourceKey, ResourceRepository};
 use agentkube_workers::RepositoryWorkerStateStore;
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 
 /// Counts from one reconciliation cycle.
 ///
@@ -34,12 +34,14 @@ pub async fn reconcile_once(
     node_id: NodeId,
 ) -> Result<ReconcileSummary, OperatorError> {
     let mut summary = ReconcileSummary::default();
+    let mut expected_children = HashSet::new();
     for mut deployment in deployments.list(None).await? {
         let child_name = format!("agentkube-deployment-{}", deployment.metadata().uid());
         let child_metadata =
             Metadata::in_namespace(child_name, deployment.metadata().namespace().clone())
                 .map_err(|error| OperatorError::Reconcile(error.to_string()))?;
         let child_key = ResourceKey::from(&child_metadata);
+        expected_children.insert(child_key.clone());
         let definition = match agents.get(&child_key).await? {
             Some(mut current) => {
                 if current.spec() != deployment.spec().template() {
@@ -109,6 +111,29 @@ pub async fn reconcile_once(
                 )
                 .map_err(|error| OperatorError::Reconcile(error.to_string()))?;
             deployments.replace(deployment).await?;
+        }
+    }
+
+    // Deployment children use a reserved UID-based name. Scale deleted
+    // deployments to zero first; running work is allowed to finish before the
+    // durable child definition is garbage-collected on a later cycle.
+    for definition in agents.list(None).await? {
+        let key = ResourceKey::from(definition.metadata());
+        if definition
+            .metadata()
+            .name()
+            .as_str()
+            .starts_with("agentkube-deployment-")
+            && !expected_children.contains(&key)
+        {
+            let remaining = state
+                .reconcile_instances(&definition, node_id, 0)
+                .map_err(|error| OperatorError::Worker(error.to_string()))?;
+            if remaining.is_empty() {
+                agents
+                    .delete(&key, definition.metadata().resource_version())
+                    .await?;
+            }
         }
     }
 
