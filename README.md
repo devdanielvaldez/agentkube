@@ -79,11 +79,13 @@ The repository currently contains the foundational Rust workspace:
 | `agentkube-sqlite` | Durable SQLite repositories with WAL and crash-safe boot recovery | Implemented |
 | `agentkube-queue` | Priority dispatch, delayed delivery, leases, and recovery | Implemented |
 | `agentkube-providers` | Model inference contracts, normalized errors, streaming, and capabilities | Implemented |
+| `agentkube-providers-http` | Ollama and OpenAI adapters with real usage accounting | Implemented |
 | `agentkube-router` | Health, privacy, capability, cost-aware routing, and failover | Implemented |
 | `agentkube-workers` | Atomic execution, runtime integration, heartbeats, and settlement | Implemented |
 | `agentkube-scheduler` | Constraint filtering, explainable scoring, and deterministic placement | Implemented |
 | `agentkube-controllers` | Idempotent deployment and agent-status reconciliation | Implemented |
 | `agentkube-api` | Versioned HTTP CRUD, pagination, health checks, and task dispatch | Implemented |
+| `agentkube-operator` | Durable API on SQLite with reconcile, dispatch, and embedded model execution | Implemented |
 | `agentkube-cli` | `akctl` HTTP client: health, apply, get/describe, delete, scale, tables/JSON/YAML | Implemented |
 
 The complete technical vision is documented in
@@ -155,6 +157,7 @@ cargo run -p agentkube-cli --bin akctl -- apply -f agents.yaml
 cargo run -p agentkube-cli --bin akctl -- get agents
 cargo run -p agentkube-cli --bin akctl -- get deployments
 cargo run -p agentkube-cli --bin akctl -- get tasks
+cargo run -p agentkube-cli --bin akctl -- get nodes
 cargo run -p agentkube-cli --bin akctl -- describe agent backend-agent
 cargo run -p agentkube-cli --bin akctl -- delete agent backend-agent
 cargo run -p agentkube-cli --bin akctl -- scale deployment workers --replicas 4

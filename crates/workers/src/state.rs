@@ -23,7 +23,11 @@ pub struct ExecutionClaim {
 }
 
 impl ExecutionClaim {
-    fn new(task: AgentTask, agent: AgentInstance, definition: AgentDefinition) -> Self {
+    /// Creates a claim from its task, agent, and definition snapshots.
+    ///
+    /// Only [`WorkerStateStore`] implementations construct claims, after
+    /// atomically transitioning every part to its running state.
+    pub(crate) fn new(task: AgentTask, agent: AgentInstance, definition: AgentDefinition) -> Self {
         Self {
             task,
             agent,

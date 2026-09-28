@@ -100,6 +100,30 @@ agentkube-api &
 akctl health
 ```
 
+## Operator (durable execution)
+
+`agentkube-api` above is in-memory and idle: applied tasks stay `QUEUED`.
+`agentkube-operator` is the same HTTP API on SQLite storage with reconcile,
+dispatch, and embedded model execution (currently source-built only):
+
+```bash
+cargo build --release -p agentkube-operator
+export AGENTKUBE_STORAGE__DATA_DIR="$HOME/.agentkube"
+export AGENTKUBE_PROVIDERS__OLLAMA_BASE_URL="http://127.0.0.1:11434"
+./target/release/agentkube-operator &
+akctl apply -f task.yaml   # reaches a terminal state via local Ollama
+akctl get nodes              # live worker heartbeats
+curl -s http://127.0.0.1:8080/metrics | head
+```
+
+Relevant knobs: `AGENTKUBE_OPERATOR__RECONCILE_INTERVAL` /
+`AGENTKUBE_OPERATOR__DISPATCH_INTERVAL`, `AGENTKUBE_WORKER__LEASE_TIMEOUT`
+(keep above model latency), `AGENTKUBE_AUTH__TOKEN` (enforces Bearer auth on
+`/v1/*`; set `AGENTKUBE_TOKEN` to the same value for `akctl`), and
+`AGENTKUBE_PROVIDERS__OPENAI_API_KEY` for hosted inference. Model catalogs
+for explicit specs live in `providers.ollamaModels` / `openaiModels` via a
+JSON config file; see `docs/parity-plan.md`.
+
 ## Manual download
 
 Pick the asset matching your platform from the release page:

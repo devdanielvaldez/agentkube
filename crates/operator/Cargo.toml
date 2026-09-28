@@ -1,0 +1,36 @@
+[package]
+name = "agentkube-operator"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Local-first AgentKube operator: durable API, reconciliation, and task execution"
+
+[[bin]]
+name = "agentkube-operator"
+path = "src/bin/agentkube-operator.rs"
+
+[dependencies]
+agentkube-agents = { path = "../agents" }
+agentkube-api = { path = "../api" }
+agentkube-config = { path = "../config" }
+agentkube-controllers = { path = "../controllers" }
+agentkube-core = { path = "../core" }
+agentkube-providers = { path = "../providers" }
+agentkube-providers-http = { path = "../providers-http" }
+agentkube-queue = { path = "../queue" }
+agentkube-router = { path = "../router" }
+agentkube-scheduler = { path = "../scheduler" }
+agentkube-sqlite = { path = "../sqlite" }
+agentkube-storage = { path = "../storage" }
+agentkube-tasks = { path = "../tasks" }
+agentkube-workers = { path = "../workers" }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile = "3"
+tokio.workspace = true

@@ -4,11 +4,13 @@
 #![forbid(unsafe_code)]
 
 mod error;
+mod repository;
 mod runtime;
 mod state;
 mod worker;
 
 pub use error::{WorkerError, WorkerFuture, WorkerResult};
+pub use repository::RepositoryWorkerStateStore;
 pub use runtime::{
     AgentRuntime, RuntimeError, RuntimeFuture, RuntimeHealth, RuntimeOutput, SingleTurnRuntime,
 };

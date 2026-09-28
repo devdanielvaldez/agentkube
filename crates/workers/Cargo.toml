@@ -12,4 +12,8 @@ agentkube-core = { path = "../core" }
 agentkube-providers = { path = "../providers" }
 agentkube-queue = { path = "../queue" }
 agentkube-router = { path = "../router" }
+agentkube-storage = { path = "../storage" }
 agentkube-tasks = { path = "../tasks" }
+
+[dev-dependencies]
+tokio.workspace = true
